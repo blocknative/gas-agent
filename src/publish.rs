@@ -10,7 +10,6 @@ pub async fn publish_agent_payload(
     payload: &AgentPayload,
 ) -> Result<()> {
     let client = Client::new();
-
     let signature = payload.sign(signer_key).await?;
 
     let json = json!({

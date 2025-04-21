@@ -1,15 +1,14 @@
 use agent::start_agent;
 use anyhow::{anyhow, Context, Result};
-use chain::Chain;
 use clap::Parser;
 use config::Config;
 use interrupts::{on_panic, on_sigterm};
 use logs::init_logs;
-use reqwest::Client;
 use server::start_server_without_state;
 use std::sync::Arc;
 use tokio::spawn;
 use tracing::{error, info};
+use utils::{get_or_create_signer_key, load_chain_list};
 
 mod agent;
 mod blocks;
@@ -28,8 +27,15 @@ mod utils;
 
 #[ntex::main]
 async fn main() -> Result<()> {
+    // Initialize tracing logger.
     init_logs();
-    let config = Config::parse();
+
+    // Parse the configuration.
+    let mut config = Config::parse();
+
+    if config.signer_key.is_none() {
+        config.signer_key = Some(get_or_create_signer_key());
+    }
 
     info!("Loading RPC for chain_id: {}", config.chain_id);
     let chains = load_chain_list().await.context("Loading chain list")?;
@@ -72,16 +78,4 @@ async fn main() -> Result<()> {
     let _ = shutdown_handler.await;
 
     Ok(())
-}
-
-async fn load_chain_list() -> Result<Vec<Chain>> {
-    let client = Client::new();
-    let response = client
-        .get("https://chainid.network/chains_mini.json")
-        .send()
-        .await?;
-
-    let json = response.json().await?;
-    let chains: Vec<Chain> = serde_json::from_value(json)?;
-    Ok(chains)
 }

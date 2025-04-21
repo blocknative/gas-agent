@@ -18,13 +18,19 @@ use tracing::{error, info};
 const MAX_NUM_BLOCK_DISTRIBUTIONS: usize = 50;
 
 pub async fn start_agent(chain: Chain, config: &Config) -> Result<()> {
-    let mut agent = GasAgent::new(chain, config).await?;
-    let signer: PrivateKeySigner = config.signer_key.parse()?;
+    let signer: PrivateKeySigner = config
+        .signer_key
+        .as_ref()
+        .expect("Signer key is required")
+        .parse()?;
+
     let address = signer.address();
 
+    let mut agent = GasAgent::new(chain, config).await?;
+
     info!(
-        "Starting agent type: {}, id: {}",
-        config.mode.to_string(),
+        "Starting agent type: {}, Signer address: {}",
+        config.mode.to_string().to_uppercase(),
         address.to_string()
     );
 
@@ -73,6 +79,7 @@ impl GasAgent {
         self.chain_tip = new_chain_tip;
 
         let (system, network) = extract_system_network(&self.chain.name);
+        let mut publish_payload: Option<AgentPayload> = None;
 
         match &self.config.mode {
             AgentKind::Model(model) => {
@@ -90,7 +97,7 @@ impl GasAgent {
                 // Run payload
                 let price = apply_model(&model, &self.block_distributions).await?;
 
-                let payload = AgentPayload {
+                publish_payload = Some(AgentPayload {
                     from_block: self.chain_tip.height + 1,
                     settlement: Settlement::Fast,
                     timestamp: Utc::now(),
@@ -99,14 +106,7 @@ impl GasAgent {
                     network,
                     price,
                     kind: AgentPayloadKind::Estimate,
-                };
-
-                publish_agent_payload(
-                    self.config.collector_endpoint.as_str(),
-                    &self.config.signer_key,
-                    &payload,
-                )
-                .await?;
+                });
             }
             AgentKind::Node => {
                 let node_price = self
@@ -120,7 +120,7 @@ impl GasAgent {
                     .ok();
 
                 if let Some(node_price) = node_price {
-                    let payload = AgentPayload {
+                    publish_payload = Some(AgentPayload {
                         from_block: self.chain_tip.height + 1,
                         settlement: Settlement::Fast,
                         timestamp: Utc::now(),
@@ -129,18 +129,11 @@ impl GasAgent {
                         network,
                         price: node_price,
                         kind: AgentPayloadKind::Estimate,
-                    };
-
-                    publish_agent_payload(
-                        self.config.collector_endpoint.as_str(),
-                        &self.config.signer_key,
-                        &payload,
-                    )
-                    .await?;
+                    });
                 }
             }
             AgentKind::Target => {
-                let payload = AgentPayload {
+                publish_payload = Some(AgentPayload {
                     from_block: self.chain_tip.height,
                     settlement: Settlement::Immediate,
                     timestamp: self.chain_tip.timestamp,
@@ -149,14 +142,20 @@ impl GasAgent {
                     network,
                     price: actual_min,
                     kind: AgentPayloadKind::Target,
-                };
+                });
+            }
+        }
 
+        if let Some(payload) = publish_payload {
+            if let Some(publish_endpoint) = &self.config.publish_endpoint {
                 publish_agent_payload(
-                    self.config.collector_endpoint.as_str(),
-                    &self.config.signer_key,
+                    publish_endpoint.as_str(),
+                    &self.config.signer_key.as_ref().unwrap(),
                     &payload,
                 )
                 .await?;
+            } else {
+                info!("Agent payload: {:?}", payload);
             }
         }
 

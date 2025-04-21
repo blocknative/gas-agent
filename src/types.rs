@@ -124,15 +124,6 @@ impl AgentPayload {
     }
 }
 
-#[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
-#[strum(serialize_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
-pub enum Env {
-    Stage,
-    Prod,
-    Local,
-}
-
 #[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "lowercase")]
 #[serde(rename_all = "lowercase")]

@@ -1,4 +1,4 @@
-use crate::types::{AgentKind, Env};
+use crate::types::AgentKind;
 use clap::Parser;
 use reqwest::Url;
 use std::net::SocketAddr;
@@ -14,12 +14,11 @@ pub struct Config {
     #[arg(long, env = "MODE")]
     pub mode: AgentKind,
 
-    #[arg(long, env = "ENV", default_value = "local")]
-    pub env: Env,
+    // The endpoint to publish data to, if not set, will log to stdout
+    #[arg(long, env = "PUBLISH_ENDPOINT")]
+    pub publish_endpoint: Option<Url>,
 
-    #[arg(long, env = "COLLECTOR_ENDPOINT")]
-    pub collector_endpoint: Url,
-
+    // The SECP256k1 private key to sign data with, if not set, will generate a new random key and write to disk for future use
     #[arg(long, env = "SIGNER_KEY")]
-    pub signer_key: String,
+    pub signer_key: Option<String>,
 }
