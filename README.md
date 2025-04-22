@@ -142,7 +142,7 @@ The agent uses a `Settlement` enum to specify different time windows:
 pub enum Settlement {
     /// Next block
     Immediate,
-    /// 15 seconds
+    /// 30 seconds
     Fast,
     /// 15 minutes
     Medium,
