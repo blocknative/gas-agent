@@ -242,7 +242,7 @@ You can extend the Gas Agent with your own custom models. Here's a detailed guid
    }
    ```
 
-   `BlockDistribution` is a list of "buckets" with the count of each fee rate for a given block. The agent by default will keep the last 50 block in memory for analysis.
+   The function accepts block distributions and returns a prediction denominated in gwei. A `BlockDistribution` is a list of "buckets" with the count of each fee rate for a given block. The agent by default will keep the last 50 block in memory for analysis.
 
 3. **Add your model to the module system** by modifying `src/models/mod.rs`:
 
@@ -277,37 +277,7 @@ You can extend the Gas Agent with your own custom models. Here's a detailed guid
 
 7. **Rebuild the agent** with your new model.
 
-### Example of a Simple Custom Model
-
-Here's an example of a simple custom model that returns the weighted average of the minimum gas prices from the last 5 blocks, with more recent blocks weighted higher:
-
-```rust
-// src/models/weighted_min.rs
-pub fn get_prediction_weighted_min(block_distributions: &[BlockDistribution]) -> f64 {
-    let mut total_weight = 0.0;
-    let mut weighted_sum = 0.0;
-
-    // Take up to the last 5 blocks
-    let recent_blocks = block_distributions.iter().rev().take(5);
-
-    for (i, block) in recent_blocks.enumerate() {
-        let weight = 5.0 - i as f64; // Weight decreases with age
-        weighted_sum += block.min_gas_price * weight;
-        total_weight += weight;
-    }
-
-    if total_weight > 0.0 {
-        weighted_sum / total_weight
-    } else {
-        // Fallback if no blocks available
-        50.0 // Default value in Gwei
-    }
-}
-```
-
-## Metrics and Logging
-
-### Logging
+## Logging
 
 The Gas Agent uses the `tracing` crate for structured logging. Logs are output in JSON format by default and include timestamps in RFC 3339 format.
 
