@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 #[derive(Parser, Clone, Debug)]
 pub struct Config {
     #[arg(long, env = "SERVER_ADDRESS", default_value = "0.0.0.0:8080")]
+    // The address to bind the HTTP server to
     pub server_address: SocketAddr,
 
     #[arg(long, env = "CHAIN_ID")]
