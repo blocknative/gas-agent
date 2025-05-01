@@ -11,6 +11,7 @@ A Rust-based agent for estimating gas prices on EVM-compatible blockchains. The 
 - [Models](#models)
 - [Settlement Time Windows](#settlement-time-windows)
 - [Adding Custom Models](#adding-custom-models)
+- [How it Works](#how-it-works)
 - [Logging](#logging)
 - [Deployment](#deployment)
 - [Security](#security)
@@ -274,6 +275,16 @@ You can extend the Gas Agent with your own custom models. Here's a detailed guid
    ```
 
 6. **Rebuild the agent** with your new model.
+
+## How It Works
+
+On startup the agent will:
+
+- Fetch a list of EVM chains from [chain list](https://chainid.network/chains_mini.json) to lookup the configured chain id to get a list of RPC URLs.
+- Loop through the RPC URLs and find the first one that successfully returns the latest block.
+- Start polling for new blocks, processing each new block into block gas distributions.
+- Passes the block distributions to the configured model to produce a prediction.
+- Posts the prediction to the pubish endpoint if configured, or logs to stdout otherwise.
 
 ## Logging
 
