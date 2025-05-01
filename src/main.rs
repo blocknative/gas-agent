@@ -2,6 +2,7 @@ use agent::start_agent;
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use config::Config;
+use dotenv::dotenv;
 use interrupts::{on_panic, on_sigterm};
 use logs::init_logs;
 use server::start_server_without_state;
@@ -27,6 +28,9 @@ mod utils;
 
 #[ntex::main]
 async fn main() -> Result<()> {
+    // Read from .env file
+    dotenv().ok();
+
     // Initialize tracing logger.
     init_logs();
 

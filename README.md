@@ -76,6 +76,8 @@ or
 ./target/release/gas-agent --server-address 0.0.0.0:8080 --chain-id 1 --mode moving-average
 ```
 
+or with a `.env` file. See the `.env.example` for a start point.
+
 ### Configuration Options
 
 | Parameter            | Environment Variable | Description                                                    | Default                             |

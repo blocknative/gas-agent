@@ -31,6 +31,7 @@ rust_decimal_macros = "^1"
 ntex = { version = "^2", features = ["tokio"] }
 futures = "^0"
 tracing = "^0"
+dotenv = "^0"
 opentelemetry-prometheus = "0.17.0"
 
 opentelemetry_sdk = { version = "0.24", default-features = false, features = [
