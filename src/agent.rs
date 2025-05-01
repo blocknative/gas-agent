@@ -136,7 +136,7 @@ impl GasAgent {
                 publish_payload = Some(AgentPayload {
                     from_block: self.chain_tip.height,
                     settlement: Settlement::Immediate,
-                    timestamp: self.chain_tip.timestamp,
+                    timestamp: Utc::now(),
                     unit: FeeUnit::Gwei,
                     system,
                     network,
