@@ -1,6 +1,6 @@
 # Gas Agent
 
-A Rust-based agent for estimating gas prices on EVM-compatible blockchains. The agent can run in different modes to predict gas prices using various statistical models or report actual gas prices from network blocks. Gas Agent provides reliable gas price estimates that can help users optimize transaction costs while ensuring timely inclusion in blocks.
+A Rust-based agent for estimating gas prices on EVM-compatible blockchains. The agent can run in different modes to predict gas prices using various statistical models or report actual gas prices from network blocks.
 
 ## Table of Contents
 
@@ -157,7 +157,7 @@ pub enum Settlement {
 
    - The agent specifies a `from_block` in each payload, which is the starting block number for the prediction.
    - The `Settlement` value determines how many blocks into the future the prediction is valid for.
-   - The receiver of the payload translates the `Settlement` value into a specific block range based on the chain's block time.
+   - The evaluation endpoint translates the `Settlement` value into a specific block range based on the chain's block time.
 
 2. **Default Behavior**:
 
@@ -242,7 +242,7 @@ You can extend the Gas Agent with your own custom models. Here's a detailed guid
    }
    ```
 
-   The function accepts block distributions and returns a prediction denominated in gwei. A `BlockDistribution` is a list of "buckets" with the count of each fee rate for a given block. The agent by default will keep the last 50 block in memory for analysis.
+   The function accepts block distributions and returns a prediction denominated in gwei. A `BlockDistribution` is a list of "buckets" with the count of each fee rate for a given block. The agent by default will keep the last 50 block distributions in memory for analysis.
 
 3. **Add your model to the module system** by modifying `src/models/mod.rs`:
 
@@ -273,9 +273,7 @@ You can extend the Gas Agent with your own custom models. Here's a detailed guid
    }
    ```
 
-6. **Update the string conversion implementations** for your model in `src/types.rs` to ensure the command-line interface works correctly.
-
-7. **Rebuild the agent** with your new model.
+6. **Rebuild the agent** with your new model.
 
 ## Logging
 
@@ -306,7 +304,6 @@ docker run -p 8080:8080 \
   -e CHAIN_ID=1 \
   -e MODE=moving-average \
   -e PUBLISH_ENDPOINT=https://your-endpoint.com/api \
-  -e ETH_RPC_URL=https://your-rpc-endpoint.com \
   gas-agent
 ```
 
