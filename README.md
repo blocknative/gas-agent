@@ -11,7 +11,7 @@ A Rust-based agent for estimating gas prices on EVM-compatible blockchains. The 
 - [Models](#models)
 - [Settlement Time Windows](#settlement-time-windows)
 - [Adding Custom Models](#adding-custom-models)
-- [Metrics and Logging](#metrics-and-logging)
+- [Logging](#logging)
 - [Deployment](#deployment)
 - [Security](#security)
 
@@ -85,7 +85,7 @@ or
 | `--publish-endpoint` | `PUBLISH_ENDPOINT`   | The endpoint to publish data to                                | Optional, logs to stdout if not set |
 | `--signer-key`       | `SIGNER_KEY`         | The SECP256k1 private key to sign data with                    | Optional, generated if not provided |
 
-You can also configure the logging level using the standard `RUST_LOG` environment variable (e.g., `RUST_LOG=debug`). See the [Metrics and Logging](#metrics-and-logging) section for more details.
+You can also configure the logging level using the standard `RUST_LOG` environment variable (e.g., `RUST_LOG=debug`). See the [Logging](#logging) section for more details.
 
 ### Signer Key
 
@@ -314,7 +314,7 @@ The Docker image is built in two stages:
 1. **Builder Stage**: Compiles the Rust application
 2. **Runtime Stage**: Minimal Debian image with only the necessary dependencies
 
-The container exposes port 8080 for the HTTP server and metrics endpoint.
+The container exposes port 8080 for the HTTP server.
 
 ## Security
 
