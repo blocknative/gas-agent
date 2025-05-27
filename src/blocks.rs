@@ -1,25 +1,20 @@
 use crate::{
     distribution::{BlockDistribution, DistributionCreator},
-    rpc::{Block, Transaction},
+    rpc::{BlockHeader, Transaction},
 };
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc};
 use rust_decimal::{
     prelude::{FromPrimitive, ToPrimitive},
     Decimal,
 };
 
-#[derive(Debug)]
-pub struct ChainTip {
-    pub height: u64,
-    pub timestamp: DateTime<Utc>,
-}
-
-pub fn block_to_block_distribution(block: &Block) -> BlockDistribution {
+pub fn block_to_block_distribution(
+    transactions: &[Transaction],
+    base_fee: &Option<u64>,
+) -> BlockDistribution {
     let mut distribution = DistributionCreator::new(0.000000001);
-    let base_fee = calc_base_fee(&block);
 
-    for tx in block.transactions.iter() {
+    for tx in transactions.iter() {
         let Transaction {
             hash,
             gas_price,
@@ -96,17 +91,10 @@ pub fn calc_fee_gwei(
     }
 }
 
-pub fn block_to_chain_tip(block: &Block) -> ChainTip {
-    ChainTip {
-        height: block.number,
-        timestamp: block.timestamp,
-    }
-}
-
 const ELASTICITY_MULTIPLIER: u64 = 2;
 const BASE_FEE_CHANGE_DENOMINATOR: u64 = 8;
 
-pub fn calc_base_fee(latest_block: &Block) -> Option<u64> {
+pub fn calc_base_fee(latest_block: &BlockHeader) -> Option<u64> {
     if let Some(parent_base_fee) = latest_block.base_fee_per_gas {
         let parent_gas_target = latest_block.gas_limit / ELASTICITY_MULTIPLIER;
 

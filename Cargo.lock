@@ -1542,10 +1542,12 @@ version = "0.0.1"
 dependencies = [
  "alloy",
  "anyhow",
+ "bytes",
  "chrono",
  "clap",
  "dotenv",
  "futures",
+ "hex",
  "ntex",
  "opentelemetry-prometheus",
  "opentelemetry_sdk",

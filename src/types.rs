@@ -11,8 +11,8 @@ use std::{fmt, str::FromStr};
 use strum_macros::{Display, EnumString};
 
 #[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
-#[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum ModelKind {
     AdaptiveThreshold,
     DistributionAnalysis,
@@ -23,7 +23,8 @@ pub enum ModelKind {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
+#[serde(from = "String")]
 pub enum AgentKind {
     /// Will publish the standard estimate from the node
     Node,
@@ -61,6 +62,12 @@ impl FromStr for AgentKind {
     }
 }
 
+impl From<String> for AgentKind {
+    fn from(s: String) -> Self {
+        AgentKind::from_str(&s).unwrap_or_else(|_| panic!("Invalid AgentKind: {}", s))
+    }
+}
+
 #[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
 #[strum(serialize_all = "UPPERCASE")]
 #[serde(rename_all = "UPPERCASE")]
@@ -87,9 +94,9 @@ pub struct AgentPayload {
     /// The unit the fee is denominated in (e.g. gwei, sats)
     pub unit: FeeUnit,
     /// The name of the chain the estimations are for (eg. ethereum, bitcoin, base)
-    pub system: String,
+    pub system: System,
     /// mainnet, etc.
-    pub network: String,
+    pub network: Network,
     /// The estimated price
     pub price: f64,
     pub kind: AgentPayloadKind,
@@ -124,6 +131,79 @@ impl AgentPayload {
     }
 }
 
+#[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
+#[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+pub enum Env {
+    Stage,
+    Prod,
+    Local,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+pub enum System {
+    Ethereum,
+    Base,
+    Polygon,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+pub enum Network {
+    Mainnet,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct SystemNetworkKey {
+    pub system: System,
+    pub network: Network,
+}
+
+impl SystemNetworkKey {
+    pub fn new(system: System, network: Network) -> Self {
+        Self { system, network }
+    }
+
+    pub fn to_chain_id(&self) -> u64 {
+        match self {
+            SystemNetworkKey {
+                system: System::Ethereum,
+                network: Network::Mainnet,
+            } => 1,
+            SystemNetworkKey {
+                system: System::Base,
+                network: Network::Mainnet,
+            } => 8453,
+            SystemNetworkKey {
+                system: System::Polygon,
+                network: Network::Mainnet,
+            } => 137,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct SystemNetworkSettlementKey {
+    pub system: System,
+    pub network: Network,
+    pub settlement: Settlement,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BlockWindow {
+    pub start: u64,
+    pub end: u64,
+}
+
+impl fmt::Display for BlockWindow {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}-{}", self.start, self.end)
+    }
+}
+
 #[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
@@ -137,4 +217,22 @@ pub enum Settlement {
     Medium,
     /// 1 hour
     Slow,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize)]
+pub struct AgentKey {
+    pub settlement: Settlement,
+    pub agent_id: String,
+    pub system: System,
+    pub network: Network,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentScore {
+    pub agent_id: String,
+    pub inclusion_cov: Option<f64>,
+    pub overpayment_cov: Option<f64>,
+    pub total_score: Option<f64>,
+    pub inclusion_rate: f64,
+    pub avg_overpayment: Option<f64>,
 }

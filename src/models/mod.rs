@@ -1,5 +1,5 @@
 use crate::distribution::BlockDistribution;
-use crate::types::ModelKind;
+use crate::types::{ModelKind, Settlement};
 use adaptive_threshold::get_prediction_adaptive_threshold;
 use anyhow::Result;
 use distribution_analysis::get_prediction_distribution;
@@ -17,14 +17,16 @@ mod time_series;
 
 const MIN_PRICE: f64 = 0.00000001;
 
-/// Will apply a model to a block distribution and return a price
+/// Will apply a model to a list of block distribution and return a price
+/// Block distributions are sorted oldest to newest.
 pub async fn apply_model(
     model: &ModelKind,
     block_distributions: &[BlockDistribution],
-) -> Result<f64> {
+    pending_block_distribution: Option<BlockDistribution>,
+) -> Result<(f64, Settlement)> {
     // Handle empty input
-    if block_distributions.is_empty() {
-        return Ok(MIN_PRICE);
+    if block_distributions.is_empty() && pending_block_distribution.is_none() {
+        return Ok((MIN_PRICE, Settlement::Fast));
     }
 
     match model {
