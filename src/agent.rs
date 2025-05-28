@@ -236,46 +236,44 @@ impl GasAgent {
         }
     }
 
-    async fn poll_pending_block(self) {
-        if let Some(pending_block_source) = self.chain_config.pending_block_data_source {
-            match pending_block_source {
-                PendingBlockDataSource::JsonRpc {
-                    url,
-                    method,
-                    params,
-                    poll_rate_ms,
-                } => {
-                    info!("Polling pending block from JSON-RPC: url: {}, method: {}, params: {:?}, polling rate: {}ms", url, method, params, poll_rate_ms);
+    async fn poll_pending_block(&self, pending_block_source: PendingBlockDataSource) {
+        match pending_block_source {
+            PendingBlockDataSource::JsonRpc {
+                url,
+                method,
+                params,
+                poll_rate_ms,
+            } => {
+                info!("Polling pending block from JSON-RPC: url: {}, method: {}, params: {:?}, polling rate: {}ms", url, method, params, poll_rate_ms);
 
-                    let rpc_url = Url::parse(&url)
-                        .context("Invalid block JSON rpc url")
-                        .expect("Valid JSON RPC url for pending block");
+                let rpc_url = Url::parse(&url)
+                    .context("Invalid block JSON rpc url")
+                    .expect("Valid JSON RPC url for pending block");
 
-                    let client = get_rpc_client(rpc_url);
+                let client = get_rpc_client(rpc_url);
 
-                    loop {
-                        match client.get_pending_block(&method, params.clone()).await {
-                            Ok(transactions) => {
-                                let chain_tip = { self.chain_tip.read().await.clone() };
-                                let next_base_fee = calc_base_fee(&chain_tip);
-                                let distribution =
-                                    block_to_block_distribution(&transactions, &next_base_fee);
+                loop {
+                    match client.get_pending_block(&method, params.clone()).await {
+                        Ok(transactions) => {
+                            let chain_tip = { self.chain_tip.read().await.clone() };
+                            let next_base_fee = calc_base_fee(&chain_tip);
+                            let distribution =
+                                block_to_block_distribution(&transactions, &next_base_fee);
 
-                                {
-                                    let mut pending_block_distribution =
-                                        self.pending_block_distribution.write().await;
+                            {
+                                let mut pending_block_distribution =
+                                    self.pending_block_distribution.write().await;
 
-                                    *pending_block_distribution = Some(distribution);
-                                }
-                            }
-                            Err(e) => {
-                                error!(error = %e, "Failed to get pending block");
+                                *pending_block_distribution = Some(distribution);
                             }
                         }
-
-                        // Sleep for poll rate duration
-                        tokio::time::sleep(Duration::from_millis(poll_rate_ms)).await;
+                        Err(e) => {
+                            error!(error = %e, "Failed to get pending block");
+                        }
                     }
+
+                    // Sleep for poll rate duration
+                    tokio::time::sleep(Duration::from_millis(poll_rate_ms)).await;
                 }
             }
         }
@@ -291,11 +289,16 @@ impl GasAgent {
     }
 
     pub async fn run(&self) -> Result<()> {
-        let pending_block_poll_agent_clone = self.clone();
+        if let Some(pending_block_source) = &self.chain_config.pending_block_data_source {
+            let pending_block_poll_agent_clone = self.clone();
+            let pending_block_source_clone = pending_block_source.clone();
 
-        tokio::spawn(async move {
-            pending_block_poll_agent_clone.poll_pending_block().await;
-        });
+            tokio::spawn(async move {
+                pending_block_poll_agent_clone
+                    .poll_pending_block(pending_block_source_clone)
+                    .await;
+            });
+        }
 
         let block_poll_agent_clone = self.clone();
 

@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::net::SocketAddr;
 
-use crate::types::{AgentKind, Env, Network, System};
+use crate::types::{AgentKind, Network, System};
 
 #[derive(Parser)]
 #[command(name = "Gas Agent")]
@@ -30,9 +30,6 @@ pub struct Config {
     /// A list of chain configurations to run (JSON format)
     #[arg(long, env = "CHAINS")]
     pub chains: String,
-
-    #[arg(long, env = "ENV", default_value = "local")]
-    pub env: Env,
 
     #[arg(long, env = "COLLECTOR_ENDPOINT")]
     pub collector_endpoint: Url,
