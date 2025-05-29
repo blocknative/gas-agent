@@ -202,6 +202,42 @@ When specified, this configures how to fetch pending block (mempool) data which 
 
 Currently, JSON RPC is the only source available, but other sources are coming soon. Please create an issue if there is a specific source that you would like to see supported.
 
+##### Expected RPC Response Structure
+
+The pending block RPC endpoint must return a JSON-RPC 2.0 response containing a `transactions` field with an array of transaction objects. The system is flexible and only requires minimal transaction data:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "transactions": [
+      {
+        "hash": "0x1234567890abcdef...",
+        "gasPrice": "0x174876e800",
+        "maxFeePerGas": "0x174876e800",
+        "maxPriorityFeePerGas": "0x59682f00"
+      },
+      {
+        "hash": "0xabcdef1234567890...",
+        "gasPrice": "0x165a0bc00"
+      }
+    ]
+  }
+}
+```
+
+**Required Fields:**
+- **`transactions`**: Array of transaction objects
+- **`hash`**: Transaction hash (string)
+
+**Optional Fields (per transaction):**
+- **`gasPrice`**: Legacy gas price in wei (hex string) - for pre-EIP-1559 transactions
+- **`maxFeePerGas`**: Maximum total fee per gas in wei (hex string) - for EIP-1559 transactions  
+- **`maxPriorityFeePerGas`**: Maximum priority fee per gas in wei (hex string) - for EIP-1559 transactions
+
+The system automatically handles both legacy transactions (using `gasPrice`) and EIP-1559 transactions (using `maxFeePerGas`/`maxPriorityFeePerGas`). All fee fields are optional, making the parser flexible enough to work with various data sources and transaction types.
+
 #### Agent Configuration
 
 Each agent in the `agents` array supports the following configuration:
