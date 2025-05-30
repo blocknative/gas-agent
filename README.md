@@ -198,6 +198,12 @@ When specified, this configures how to fetch pending block (mempool) data which 
 }
 ```
 
+A full `CHAINS` configuration for Ethereum with a JSON RPC pending block data source:
+
+```bash
+CHAINS='[{"system": "ethereum", "network": "mainnet", "json_rpc_url": "https://ethereum-rpc.publicnode.com", "pending_block_data_source": {"json_rpc": {"url": "http://localhost:8545", "method": "eth_getBlockByNumber", "params": ["pending", true], "poll_rate_ms": 1000}}, "agents": [{"kind": "pending_floor", "prediction_trigger": {"poll": {"rate_ms": 1000}}, "signer_key": "0xede33830a316e1f3018a50709c54d1f01d6ab3053f4f29ec552ce10bc9f5ef72"}]}]'
+```
+
 **Fields:**
 
 - **`url`** (required): The JSON-RPC endpoint URL

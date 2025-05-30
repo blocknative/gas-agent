@@ -17,6 +17,8 @@ pub async fn publish_agent_payload(
         "signature": signature
     });
 
+    tracing::debug!("Publishing agent payload: {:?}", json);
+
     let response = client
         .post(format!("{}{}", collector_endpoint, AGENT_PUBLISH_PATH))
         .json(&json)

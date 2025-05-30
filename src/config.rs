@@ -56,6 +56,7 @@ pub struct AgentConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PendingBlockDataSource {
     JsonRpc {
         url: String,
