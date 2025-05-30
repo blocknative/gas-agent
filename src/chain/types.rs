@@ -1,0 +1,67 @@
+use super::super::types::AgentPayload;
+use crate::types::{Network, System, SystemNetworkKey};
+use alloy::primitives::aliases::{U240, U48};
+
+#[derive(Debug, Clone)]
+pub struct OraclePayloadV2 {
+    pub header: OraclePayloadHeaderV2,
+    pub records: Vec<OraclePayloadRecordV2>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OraclePayloadHeaderV2 {
+    // Version of the payload format
+    pub version: u8,
+    // Block height of the payload source
+    pub height: u64,
+    // ChainID parameter of the record data
+    pub chain_id: u64,
+    // System ID parameter of the record data
+    pub system_id: u8,
+    // Timestamp (Miliseconds) of the payload source
+    pub timestamp: U48,
+    // Number of records in the payload
+    pub length: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct OraclePayloadRecordV2 {
+    // TypeID of the record
+    pub typ: u16,
+    // Value of the record
+    pub value: U240,
+}
+
+impl From<AgentPayload> for OraclePayloadV2 {
+    fn from(payload: AgentPayload) -> Self {
+        let (systemid, chainid) = get_network_config_values(&payload.system, &payload.network);
+
+        OraclePayloadV2 {
+            header: OraclePayloadHeaderV2 {
+                version: 2,
+                height: payload.from_block,
+                chain_id: chainid,
+                system_id: systemid,
+                timestamp: U48::from(payload.timestamp.timestamp_millis()),
+                length: 1 as u16,
+            },
+            records: vec![OraclePayloadRecordV2 {
+                typ: 340, // Hardcoded into type 340 - Max Priority Fee Per Gas 99th.
+                value: U240::from(payload.price),
+            }],
+        }
+    }
+}
+
+fn get_network_config_values(system: &System, network: &Network) -> (u8, u64) {
+    match system {
+        // System::Bitcoin => match network {
+        //     Network::Mainnet => (1, 1), // Infer system 1 chain 1 for btc mainnet
+        //     _ => (1, chain_id.clone()),
+        // },
+        _ => (
+            2,
+            SystemNetworkKey::new(system.clone(), network.clone()).to_chain_id(),
+        ),
+    }
+}

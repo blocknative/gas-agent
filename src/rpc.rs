@@ -5,9 +5,11 @@ use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fmt::Debug;
+use tracing::error;
 
 use crate::blocks::wei_to_gwei;
 
+#[derive(Clone)]
 pub struct RpcClient {
     host: String,
     client: Client,
@@ -72,6 +74,29 @@ impl RpcClient {
         let block = parse_block(&value)?;
 
         Ok(block)
+    }
+
+    pub async fn get_pending_block(
+        &self,
+        method: &str,
+        params: Option<Value>,
+    ) -> Result<Vec<Transaction>> {
+        let value: Value = self.request(&self.create_request(method, params)).await?;
+
+        let transactions = parse_transactions(&value)?;
+
+        Ok(transactions)
+    }
+
+    pub async fn get_chain_id(&self) -> Result<u64> {
+        let value: Value = self
+            .request(&self.create_request("eth_chainId", None))
+            .await?;
+
+        let hex = value.as_str().unwrap().to_string();
+        let chain_id = parse_hex_to_u64(&hex);
+
+        Ok(chain_id)
     }
 
     pub async fn get_node_gas_price_estimate(&self) -> Result<f64> {
@@ -144,7 +169,7 @@ fn generate_rpc_id() -> u32 {
     rand::rng().random()
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Block {
     pub number: u64,
@@ -155,7 +180,29 @@ pub struct Block {
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockHeader {
+    pub number: u64,
+    pub timestamp: DateTime<Utc>,
+    pub gas_limit: u64,
+    pub gas_used: u64,
+    pub base_fee_per_gas: Option<u64>,
+}
+
+impl From<Block> for BlockHeader {
+    fn from(block: Block) -> Self {
+        BlockHeader {
+            number: block.number,
+            timestamp: block.timestamp,
+            gas_limit: block.gas_limit,
+            gas_used: block.gas_used,
+            base_fee_per_gas: block.base_fee_per_gas,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub hash: String,
@@ -182,7 +229,7 @@ fn parse_hex_to_u64(hex_str: &str) -> u64 {
 fn parse_hex_to_u128(hex_str: &str) -> u128 {
     let cleaned = hex_str.strip_prefix("0x").unwrap_or(hex_str);
     u128::from_str_radix(cleaned, 16)
-        .map_err(|e| dbg!(e, cleaned))
+        .map_err(|e| error!("Failed to parse hex to u128: {}", e))
         .unwrap_or(0)
 }
 
@@ -191,12 +238,14 @@ pub fn parse_block(value: &Value) -> Result<Block> {
     let number_hex = value["number"]
         .as_str()
         .ok_or(anyhow!("Missing or invalid number field"))?;
+
     let number = parse_hex_to_u64(number_hex);
 
     // Parse the timestamp field (hex string to u64, then to DateTime<Utc>)
     let timestamp_hex = value["timestamp"]
         .as_str()
         .ok_or(anyhow!("Missing or invalid timestamp field"))?;
+
     let timestamp_secs = parse_hex_to_u64(timestamp_hex);
     let timestamp = Utc.timestamp_opt(timestamp_secs as i64, 0).unwrap();
 
@@ -214,7 +263,20 @@ pub fn parse_block(value: &Value) -> Result<Block> {
         .ok_or(anyhow!("Missing or invalid gasLimit field"))?;
 
     // Parse transactions
-    let transactions = if let Some(txs_array) = value["transactions"].as_array() {
+    let transactions = parse_transactions(value)?;
+
+    Ok(Block {
+        number,
+        timestamp,
+        gas_used,
+        gas_limit,
+        base_fee_per_gas,
+        transactions,
+    })
+}
+
+fn parse_transactions(block: &Value) -> Result<Vec<Transaction>> {
+    if let Some(txs_array) = block["transactions"].as_array() {
         txs_array
             .iter()
             .map(|tx| {
@@ -238,17 +300,8 @@ pub fn parse_block(value: &Value) -> Result<Block> {
                     max_priority_fee_per_gas,
                 })
             })
-            .collect::<Result<Vec<Transaction>>>()?
+            .collect::<Result<Vec<Transaction>>>()
     } else {
-        return Err(anyhow!("Missing or invalid transactions array"));
-    };
-
-    Ok(Block {
-        number,
-        timestamp,
-        gas_used,
-        gas_limit,
-        base_fee_per_gas,
-        transactions,
-    })
+        Err(anyhow!("Missing or invalid transactions array"))
+    }
 }

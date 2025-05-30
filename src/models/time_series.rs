@@ -5,11 +5,16 @@ This approach uses simple linear regression to identify trends in gas prices and
 How it works: This algorithm calculates the median gas price for each block, performs linear regression to identify the trend, and extrapolates to predict the next value. It's particularly useful when gas prices show a consistent trend over time (either increasing or decreasing).
 */
 
+use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
+use anyhow::{anyhow, Result};
 
 use super::moving_average::get_prediction_swma;
 
-pub fn get_prediction_time_series(block_distributions: &[BlockDistribution]) -> f64 {
+pub fn get_prediction_time_series(block_distributions: &[BlockDistribution]) -> Result<(f64, Settlement)> {
+    if block_distributions.is_empty() {
+        return Err(anyhow!("TimeSeries model requires at least one block distribution"));
+    }
     // Need more blocks for time series analysis
     let num_blocks = 20.min(block_distributions.len());
     if num_blocks < 3 {
@@ -51,6 +56,10 @@ pub fn get_prediction_time_series(block_distributions: &[BlockDistribution]) -> 
         median_prices.push(median_price);
     }
 
+    if median_prices.is_empty() {
+        return Err(anyhow!("TimeSeries model requires blocks with transactions"));
+    }
+
     // Simple linear regression
     let n = median_prices.len() as f64;
     let x_mean = (n - 1.0) / 2.0;
@@ -85,5 +94,5 @@ pub fn get_prediction_time_series(block_distributions: &[BlockDistribution]) -> 
     let reasonable_max = max_observed * 1.5; // Allow up to 50% increase
     let predicted_price = predicted_price.min(reasonable_max);
 
-    round_to_9_places(predicted_price)
+    Ok((round_to_9_places(predicted_price), Settlement::Fast))
 }

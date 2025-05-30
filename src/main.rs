@@ -1,15 +1,17 @@
-use agent::start_agent;
-use anyhow::{anyhow, Context, Result};
+use agent::start_agents;
+use anyhow::anyhow;
+use anyhow::{Context, Result};
 use clap::Parser;
-use config::Config;
+use config::{ChainConfig, Cli, Commands};
 use dotenv::dotenv;
 use interrupts::{on_panic, on_sigterm};
 use logs::init_logs;
 use server::start_server_without_state;
 use std::sync::Arc;
-use tokio::spawn;
+use tokio::sync::Mutex;
+use tokio::task::JoinSet;
 use tracing::{error, info};
-use utils::{get_or_create_signer_key, load_chain_list};
+use utils::generate_key_pair;
 
 mod agent;
 mod blocks;
@@ -28,58 +30,61 @@ mod utils;
 
 #[ntex::main]
 async fn main() -> Result<()> {
-    // Read from .env file
     dotenv().ok();
-
-    // Initialize tracing logger.
     init_logs();
 
-    // Parse the configuration.
-    let mut config = Config::parse();
+    let cli = Cli::parse();
 
-    if config.signer_key.is_none() {
-        config.signer_key = Some(get_or_create_signer_key());
+    match cli.command {
+        Commands::GenerateKeys => generate_key_pair(),
+        Commands::Start(config) => {
+            let chain_configs: Vec<ChainConfig> =
+                serde_json::from_str(&config.chains).context("Loading Chain Configurations")?;
+
+            if chain_configs.is_empty() {
+                return Err(anyhow!("No chains configured"));
+            }
+
+            let server_address = config.server_address.clone();
+
+            // log panics
+            on_panic(|panic_info| error!(error = %panic_info, "Panic detected!!"));
+
+            let agents_handles = Arc::new(Mutex::new(JoinSet::new()));
+            let agents_handles_clone = agents_handles.clone();
+
+            for chain_config in chain_configs {
+                let config_clone = config.clone();
+
+                agents_handles_clone.lock().await.spawn(async move {
+                    let system = chain_config.system.clone();
+                    let network = chain_config.network.clone();
+
+                    if let Err(e) = start_agents(chain_config, &config_clone).await {
+                        error!(
+                            "Failed to start agent for system: {}, network: {}, error: {}",
+                            &system,
+                            &network,
+                            e.to_string()
+                        );
+                    }
+                });
+            }
+
+            // Create handlers for both SIGTERM and SIGINT
+            let shutdown_handler = on_sigterm(move || {
+                let agents_for_shutdown = agents_handles.clone();
+
+                async move {
+                    agents_for_shutdown.lock().await.abort_all();
+                }
+            });
+
+            info!("Starting server at {}", &server_address);
+            let _ = start_server_without_state(&server_address, None).await;
+            let _ = shutdown_handler.await;
+
+            Ok(())
+        }
     }
-
-    info!("Loading RPC for chain_id: {}", config.chain_id);
-    let chains = load_chain_list().await.context("Loading chain list")?;
-
-    let configured_chain = chains
-        .into_iter()
-        .find(|chain| chain.chain_id == config.chain_id)
-        .ok_or(anyhow!(
-            "Chain ID: {} does not exit on chain list",
-            config.chain_id
-        ))?;
-
-    let server_address = config.server_address.clone();
-
-    // log panics
-    on_panic(|panic_info| error!(error = %panic_info, "Panic detected!!"));
-
-    info!("Loaded {} from chain list", configured_chain.name);
-    let handle = Arc::new(spawn(async move {
-        if let Err(e) = start_agent(configured_chain, &config).await {
-            error!(
-                "Failed to start agent for chain_id: {}, error: {}",
-                &config.chain_id,
-                e.to_string()
-            );
-        }
-    }));
-
-    // Create handlers for both SIGTERM and SIGINT
-    let handle_for_shutdown = handle.clone();
-    let shutdown_handler = on_sigterm(move || {
-        let handle = handle_for_shutdown.clone();
-        async move {
-            handle.abort();
-        }
-    });
-
-    info!("Starting server at {}", &server_address);
-    let _ = start_server_without_state(&server_address, None).await;
-    let _ = shutdown_handler.await;
-
-    Ok(())
 }
