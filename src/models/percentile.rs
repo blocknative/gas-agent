@@ -7,8 +7,13 @@ How it works: This algorithm collects all gas prices from recent blocks, sorts t
 
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
+use anyhow::{anyhow, Result};
 
-pub fn get_prediction_percentile(block_distributions: &[BlockDistribution]) -> (f64, Settlement) {
+pub fn get_prediction_percentile(block_distributions: &[BlockDistribution]) -> Result<(f64, Settlement)> {
+    if block_distributions.is_empty() {
+        return Err(anyhow!("Percentile model requires at least one block distribution"));
+    }
+
     let percentile = 0.75; // 75th percentile for high inclusion probability
 
     // Use 5 most recent blocks
@@ -29,6 +34,10 @@ pub fn get_prediction_percentile(block_distributions: &[BlockDistribution]) -> (
     // Calculate total number of transactions
     let total_txs: u32 = all_gas_prices.iter().map(|(_, count)| *count).sum();
 
+    if total_txs == 0 {
+        return Err(anyhow!("Percentile model requires blocks with transactions"));
+    }
+
     // Find the gas price at the given percentile
     let target_count = (total_txs as f64 * percentile) as u32;
     let mut cumulative_count = 0;
@@ -42,5 +51,5 @@ pub fn get_prediction_percentile(block_distributions: &[BlockDistribution]) -> (
         }
     }
 
-    (round_to_9_places(percentile_price), Settlement::Fast)
+    Ok((round_to_9_places(percentile_price), Settlement::Fast))
 }

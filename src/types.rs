@@ -20,6 +20,7 @@ pub enum ModelKind {
     Percentile,
     TimeSeries,
     LastMin,
+    PendingFloor,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

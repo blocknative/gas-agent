@@ -31,7 +31,11 @@ pub struct Config {
     #[arg(long, env = "CHAINS")]
     pub chains: String,
 
-    #[arg(long, env = "COLLECTOR_ENDPOINT")]
+    #[arg(
+        long,
+        env = "COLLECTOR_ENDPOINT",
+        default_value = "https://collector.gas.network"
+    )]
     pub collector_endpoint: Url,
 }
 

@@ -1,6 +1,6 @@
-use super::MIN_PRICE;
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
+use anyhow::{anyhow, Result};
 use rust_decimal::{
     prelude::{FromPrimitive, ToPrimitive},
     Decimal,
@@ -15,13 +15,15 @@ How it works: This algorithm finds the minimum gas price included in each recent
 
 pub fn get_prediction_adaptive_threshold(
     block_distributions: &[BlockDistribution],
-) -> (f64, Settlement) {
+) -> Result<(f64, Settlement)> {
     // Handle empty input
     if block_distributions.is_empty() {
-        return (MIN_PRICE, Settlement::Fast);
+        return Err(anyhow!(
+            "AdaptiveThreshold model requires at least one block distribution"
+        ));
     }
 
-    // Use 10 most recent blocks
+    // Use 50 most recent blocks
     let num_blocks = 50.min(block_distributions.len());
     let blocks_to_consider = &block_distributions[block_distributions.len() - num_blocks..];
 
@@ -44,6 +46,12 @@ pub fn get_prediction_adaptive_threshold(
             .unwrap_or(0.0);
 
         min_included_prices.push(min_price);
+    }
+
+    if min_included_prices.is_empty() {
+        return Err(anyhow!(
+            "AdaptiveThreshold model requires blocks with transactions"
+        ));
     }
 
     // Calculate weighted average, with higher weights for recent blocks
@@ -78,5 +86,5 @@ pub fn get_prediction_adaptive_threshold(
         .to_f64()
         .unwrap();
 
-    (round_to_9_places(predicted_price), Settlement::Fast)
+    Ok((round_to_9_places(predicted_price), Settlement::Fast))
 }

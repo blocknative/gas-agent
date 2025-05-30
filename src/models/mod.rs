@@ -5,6 +5,7 @@ use anyhow::Result;
 use distribution_analysis::get_prediction_distribution;
 use last_min::get_prediction_last_min;
 use moving_average::get_prediction_swma;
+use pending_floor::get_prediction_pending_floor;
 use percentile::get_prediction_percentile;
 use time_series::get_prediction_time_series;
 
@@ -12,10 +13,11 @@ mod adaptive_threshold;
 mod distribution_analysis;
 mod last_min;
 mod moving_average;
+mod pending_floor;
 mod percentile;
 mod time_series;
 
-const MIN_PRICE: f64 = 0.00000001;
+
 
 /// Will apply a model to a list of block distribution and return a price
 /// Block distributions are sorted oldest to newest.
@@ -24,17 +26,181 @@ pub async fn apply_model(
     block_distributions: &[BlockDistribution],
     pending_block_distribution: Option<BlockDistribution>,
 ) -> Result<(f64, Settlement)> {
-    // Handle empty input
-    if block_distributions.is_empty() && pending_block_distribution.is_none() {
-        return Ok((MIN_PRICE, Settlement::Fast));
+    match model {
+        ModelKind::AdaptiveThreshold => get_prediction_adaptive_threshold(block_distributions),
+        ModelKind::DistributionAnalysis => get_prediction_distribution(block_distributions),
+        ModelKind::MovingAverage => get_prediction_swma(block_distributions),
+        ModelKind::Percentile => get_prediction_percentile(block_distributions),
+        ModelKind::TimeSeries => get_prediction_time_series(block_distributions),
+        ModelKind::LastMin => get_prediction_last_min(block_distributions),
+        ModelKind::PendingFloor => get_prediction_pending_floor(pending_block_distribution),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::distribution::Bucket;
+
+    #[tokio::test]
+    async fn test_apply_model_pending_floor() {
+        let pending_distribution = vec![
+            Bucket {
+                gwei: 10.0,
+                count: 5,
+            },
+            Bucket {
+                gwei: 5.0,
+                count: 3,
+            },
+            Bucket {
+                gwei: 15.0,
+                count: 2,
+            },
+        ];
+
+        let (price, settlement) =
+            apply_model(&ModelKind::PendingFloor, &[], Some(pending_distribution))
+                .await
+                .unwrap();
+
+        // Should be minimum (5.0) + 1 wei (0.000000001)
+        let expected = 5.0 + 0.000000001;
+        assert_eq!(price, crate::utils::round_to_9_places(expected));
+        assert_eq!(settlement, Settlement::Fast);
     }
 
-    match model {
-        ModelKind::AdaptiveThreshold => Ok(get_prediction_adaptive_threshold(block_distributions)),
-        ModelKind::DistributionAnalysis => Ok(get_prediction_distribution(block_distributions)),
-        ModelKind::MovingAverage => Ok(get_prediction_swma(block_distributions)),
-        ModelKind::Percentile => Ok(get_prediction_percentile(block_distributions)),
-        ModelKind::TimeSeries => Ok(get_prediction_time_series(block_distributions)),
-        ModelKind::LastMin => Ok(get_prediction_last_min(block_distributions)),
+    #[tokio::test]
+    async fn test_apply_model_pending_floor_no_pending() {
+        let result = apply_model(&ModelKind::PendingFloor, &[], None).await;
+
+        // Should return an error when no pending distribution
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires pending block distribution"));
+    }
+
+    #[test]
+    fn test_pending_floor_model_kind_parsing() {
+        use std::str::FromStr;
+
+        // Test that PendingFloor can be parsed from string
+        let model = ModelKind::from_str("pending_floor").unwrap();
+        assert!(matches!(model, ModelKind::PendingFloor));
+
+        // Test that it can be converted to string
+        assert_eq!(model.to_string(), "pending_floor");
+    }
+
+    #[tokio::test]
+    async fn test_last_min_model_errors() {
+        // Test empty block distributions
+        let result = apply_model(&ModelKind::LastMin, &[], None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+
+        // Test empty last block
+        let empty_block = vec![];
+        let result = apply_model(&ModelKind::LastMin, &[empty_block], None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("non-empty block distribution"));
+    }
+
+    #[tokio::test]
+    async fn test_percentile_model_errors() {
+        // Test empty block distributions
+        let result = apply_model(&ModelKind::Percentile, &[], None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+
+        // Test blocks with no transactions
+        let empty_blocks = vec![vec![], vec![]];
+        let result = apply_model(&ModelKind::Percentile, &empty_blocks, None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("blocks with transactions"));
+    }
+
+    #[tokio::test]
+    async fn test_moving_average_model_errors() {
+        // Test empty block distributions
+        let result = apply_model(&ModelKind::MovingAverage, &[], None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+
+        // Test blocks with no transactions (should result in zero weight_sum)
+        let empty_blocks = vec![vec![], vec![]];
+        let result = apply_model(&ModelKind::MovingAverage, &empty_blocks, None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("blocks with transactions"));
+    }
+
+    #[tokio::test]
+    async fn test_adaptive_threshold_model_errors() {
+        // Test empty block distributions
+        let result = apply_model(&ModelKind::AdaptiveThreshold, &[], None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+
+        // Test blocks with no transactions
+        let empty_blocks = vec![vec![], vec![]];
+        let result = apply_model(&ModelKind::AdaptiveThreshold, &empty_blocks, None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("blocks with transactions"));
+    }
+
+    #[tokio::test]
+    async fn test_time_series_model_errors() {
+        // Test empty block distributions
+        let result = apply_model(&ModelKind::TimeSeries, &[], None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+
+        // Test blocks with no transactions
+        let empty_blocks = vec![vec![], vec![], vec![]];
+        let result = apply_model(&ModelKind::TimeSeries, &empty_blocks, None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("blocks with transactions"));
+    }
+
+    #[tokio::test]
+    async fn test_distribution_analysis_model_errors() {
+        // Test empty block distributions
+        let result = apply_model(&ModelKind::DistributionAnalysis, &[], None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+
+        // Test empty latest block
+        let empty_block = vec![];
+        let result = apply_model(&ModelKind::DistributionAnalysis, &[empty_block], None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("non-empty latest block"));
+    }
+
+    #[tokio::test]
+    async fn test_models_with_valid_data() {
+        let valid_block = vec![
+            Bucket { gwei: 10.0, count: 5 },
+            Bucket { gwei: 15.0, count: 3 },
+            Bucket { gwei: 8.0, count: 2 },
+        ];
+        let blocks = vec![valid_block.clone(), valid_block.clone()];
+
+        // Test all models with valid data
+        let result = apply_model(&ModelKind::LastMin, &blocks, None).await;
+        assert!(result.is_ok());
+
+        let result = apply_model(&ModelKind::Percentile, &blocks, None).await;
+        assert!(result.is_ok());
+
+        let result = apply_model(&ModelKind::MovingAverage, &blocks, None).await;
+        assert!(result.is_ok());
+
+        let result = apply_model(&ModelKind::AdaptiveThreshold, &blocks, None).await;
+        assert!(result.is_ok());
+
+        let result = apply_model(&ModelKind::TimeSeries, &blocks, None).await;
+        assert!(result.is_ok());
+
+        let result = apply_model(&ModelKind::DistributionAnalysis, &blocks, None).await;
+        assert!(result.is_ok());
     }
 }

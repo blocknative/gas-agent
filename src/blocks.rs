@@ -31,7 +31,9 @@ pub fn block_to_block_distribution(
                 max_priority_fee_per_gas,
                 &base_fee,
             ) {
-                std::result::Result::Ok(miner_reward) => distribution.add(miner_reward),
+                std::result::Result::Ok(effective_gas_price) => {
+                    distribution.add(effective_gas_price)
+                }
                 Err(e) => {
                     eprint!(
                         "Failed to calculate miner reward for transaction with hash: {}, error: {}",

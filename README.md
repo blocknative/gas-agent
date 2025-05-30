@@ -41,10 +41,11 @@ cargo --version
    cp .env.example .env
    ```
 
-   Edit `.env` with your configuration:
+   Edit `.env` with your configuration. See [Configuration Options](#configuration-options)
 
 3. **Generate signing keys**
-   All agent payloads are signed before submission to the Gas Network so that they are verifiable and attributable. Predictions will be evaluated by the combination of the `System`, `Network`, `Settlement` and `from_block` of the payload. It is recommended that you use a unique key pair for each `AgentKind` otherwise the predictions for the same combination will be averaged and evaluated, rather then evaluated separately (which might be what you want!). Use the private key for the `signer_key` field for each agent.
+
+   All agent payloads are signed before submission to the Gas Network so that they are verifiable and attributable. Predictions will be evaluated by the combination of the `System`, `Network`, `Settlement` and `from_block` of the payload. It is recommended that you use a unique key pair for each `AgentKind`, otherwise the predictions for the same combination will be averaged and evaluated together, rather then evaluated separately. Use the private key for the `signer_key` field for each agent.
 
    There is a helper CLI command if you would like to generate some fresh random keys:
 
@@ -61,6 +62,7 @@ cargo --version
    ```
 
 5. **Configure chains and agents**
+
    A list of chains and the agents to run for each chain can be configured and will run in parallel with each chain running on it's own thread. Set the `CHAINS` env variable with a JSON string:
 
    ```json
@@ -100,6 +102,7 @@ Before your agent can submit predictions to the Gas Network, you need to registe
 To register your agent and get your signing addresses whitelisted:
 
 1. **Generate Your Keys**: Use the built-in key generation tool to create your signing keys:
+
    ```bash
    cargo run -- generate-keys
    ```
@@ -107,6 +110,7 @@ To register your agent and get your signing addresses whitelisted:
 2. **Save Your Keys**: Securely store the private key for your agent configuration and note the corresponding public address
 
 3. **Submit Whitelist Request**: Contact the Blocknative team with your public address(es):
+
    - **Email**: [support@blocknative.com](mailto:support@blocknative.com)
    - **Discord**: Join our community at [https://discord.com/invite/KZaBVME](https://discord.com/invite/KZaBVME)
 
@@ -125,6 +129,7 @@ To register your agent and get your signing addresses whitelisted:
 ### Testing Before Whitelisting
 
 While waiting for whitelist approval, you can:
+
 - Test your agent locally with mock endpoints
 - Verify your prediction logic and model performance
 - Ensure your signing and payload generation works correctly
@@ -147,9 +152,9 @@ cargo test
 
 The agent supports the following command-line arguments and environment variables:
 
-- `--server-address` / `SERVER_ADDRESS`: HTTP server bind address (currently used only for kubernetes probes) (default: `0.0.0.0:8080`)
+- `--server-address` / `SERVER_ADDRESS`: HTTP server bind address (currently used only for Kubernetes probes) (default: `0.0.0.0:8080`)
 - `--chains` / `CHAINS`: JSON configuration for EVM networks and agents
-- `--collector-endpoint` / `COLLECTOR_ENDPOINT`: The Gas Network endpoint for payload evaluation
+- `--collector-endpoint` / `COLLECTOR_ENDPOINT`: The Gas Network endpoint for payload evaluation (default: `https://collector.gas.network`)
 
 ### Chain Configuration
 
@@ -165,11 +170,11 @@ The chain configuration is specified as a JSON array where each object represent
 
   - Available options: `"mainnet"`
 
-- **`json_rpc_url`** (required): The JSON-RPC endpoint URL for the blockchain network
+- **`json_rpc_url`** (required): The JSON-RPC endpoint URL to poll for new blocks
 
   - Example: `"https://ethereum-rpc.publicnode.com"`
 
-- **`pending_block_data_source`** (optional): Configuration for fetching pending block data
+- **`pending_block_data_source`** (optional): Configuration for fetching pending-block (mempool) data
 
   - See [Pending Block Data Source](#pending-block-data-source) section below
 
@@ -186,7 +191,7 @@ When specified, this configures how to fetch pending block (mempool) data which 
     "json_rpc": {
       "url": "https://api.example.com/pending",
       "method": "eth_getPendingBlock",
-      "params": ["latest"],
+      "params": ["pending"],
       "poll_rate_ms": 1000
     }
   }
@@ -228,12 +233,14 @@ The pending block RPC endpoint must return a JSON-RPC 2.0 response containing a 
 ```
 
 **Required Fields:**
+
 - **`transactions`**: Array of transaction objects
 - **`hash`**: Transaction hash (string)
 
 **Optional Fields (per transaction):**
+
 - **`gasPrice`**: Legacy gas price in wei (hex string) - for pre-EIP-1559 transactions
-- **`maxFeePerGas`**: Maximum total fee per gas in wei (hex string) - for EIP-1559 transactions  
+- **`maxFeePerGas`**: Maximum total fee per gas in wei (hex string) - for EIP-1559 transactions
 - **`maxPriorityFeePerGas`**: Maximum priority fee per gas in wei (hex string) - for EIP-1559 transactions
 
 The system automatically handles both legacy transactions (using `gasPrice`) and EIP-1559 transactions (using `maxFeePerGas`/`maxPriorityFeePerGas`). All fee fields are optional, making the parser flexible enough to work with various data sources and transaction types.
@@ -263,6 +270,7 @@ Each agent in the `agents` array supports the following configuration:
     - `"percentile"`: Uses percentile-based predictions
     - `"time_series"`: Uses time series analysis
     - `"last_min"`: Takes the minimum from the previous block and uses that as the prediction for the next block.
+    - `"pending_floor"`: Takes the minimum from the pending-block, adds 1 wei and uses that as the prediction for the next block.
 
 - **`signer_key`** (required): Private key for signing predictions (use `cargo run -- generate-keys` to create)
 
@@ -272,33 +280,65 @@ Each agent in the `agents` array supports the following configuration:
 
 ## Models
 
-The gas agent includes several built-in prediction models that analyze recent block data to estimate optimal gas prices. Each model uses different strategies to predict gas prices based on historical transaction patterns.
+The gas agent includes several built-in prediction models that analyze block data to estimate optimal gas prices. Each model uses different strategies and data sources to predict gas prices. All models now return errors when they lack sufficient data instead of fallback values, providing clear feedback about what's needed for successful predictions.
 
-### Available Models
+### Historical Block Models
+
+These models use historical onchain data to create a prediction for the next block. Since these models can only generate a single prediction per block, the `"prediction_trigger": "block"` is typically used with these models. All historical models require at least one block with transaction data and will return descriptive errors if insufficient data is provided.
 
 #### `percentile`
 
-Analyzes the distribution of gas prices across the 5 most recent blocks and selects the 75th percentile to ensure high inclusion probability. This model is particularly effective during periods of high volatility, as it targets a price that would have included 75% of recent transactions.
+Analyzes the distribution of gas prices across the 5 most recent blocks and selects the 75th percentile to ensure high inclusion probability. This model is particularly effective during periods of high volatility, as it targets a price that would have included 75% of recent transactions. Requires at least one block distribution with transactions.
 
 #### `last_min`
 
-Simply takes the minimum gas price from the most recent block and uses it as the prediction for the next block. This is the most aggressive pricing strategy and works well when gas prices are stable.
+Simply takes the minimum gas price from the most recent block and uses it as the prediction for the next block. This is the most aggressive pricing strategy and works well when gas prices are stable. Requires at least one non-empty block distribution.
 
 #### `moving_average`
 
-Calculates a Simple Weighted Moving Average (SWMA) of recent gas prices, giving more weight to more recent blocks (up to 10 blocks). This approach works well when gas prices are relatively stable and provides smooth price transitions.
+Calculates a Simple Weighted Moving Average (SWMA) of recent gas prices, giving more weight to more recent blocks (up to 10 blocks). This approach works well when gas prices are relatively stable and provides smooth price transitions. Requires at least one block with transactions.
 
 #### `adaptive_threshold`
 
-Identifies the minimum gas price that would have been included in each recent block (up to 50 blocks) and applies an adaptive premium based on price volatility. When prices are stable, it applies a small premium; when volatile, it applies a larger premium (up to 50%). This provides a balance between cost and inclusion probability.
+Identifies the minimum gas price that would have been included in each recent block (up to 50 blocks) and applies an adaptive premium based on price volatility. When prices are stable, it applies a small premium; when volatile, it applies a larger premium (up to 50%). This provides a balance between cost and inclusion probability. Requires at least one block distribution with transactions.
 
 #### `time_series`
 
-Uses simple linear regression to identify trends in gas prices and predict the next value based on the median gas price of the last 20 blocks. This model is particularly useful when gas prices show a consistent trend over time (either increasing or decreasing). Falls back to moving average if insufficient data is available.
+Uses simple linear regression to identify trends in gas prices and predict the next value based on the median gas price of the last 20 blocks. This model is particularly useful when gas prices show a consistent trend over time (either increasing or decreasing). Requires at least one block with transactions for analysis.
 
 #### `distribution_analysis`
 
-Analyzes the cumulative distribution function (CDF) of gas prices in the most recent block to find "sweet spots" where many transactions are being included. It identifies points where the rate of change in the CDF decreases significantly, representing efficient gas price levels, then applies a 10% premium for higher inclusion probability.
+Analyzes the cumulative distribution function (CDF) of gas prices in the most recent block to find "sweet spots" where many transactions are being included. It identifies points where the rate of change in the CDF decreases significantly, representing efficient gas price levels, then applies a 10% premium for higher inclusion probability. Requires at least one block distribution with a non-empty latest block.
+
+### Pending Block Models
+
+These models use pending (mempool or private) transaction data to make predictions. They are specifically designed for users who have access to pending block information, such as block builders with proprietary transaction flows.
+
+#### `pending_floor`
+
+Specifically designed for block builders with proprietary private transaction flow who can see what the likely next block will contain. This model analyzes the pending block distribution to find the minimum gas price and adds exactly 1 wei (0.000000001 gwei) to ensure transaction inclusion while paying the absolute minimum. Unlike historical models, this one requires access to pending block data and will return an error if no pending block distribution is provided. Most effective when used with a polling prediction trigger to provide up to date predictions (`"prediction_trigger": {"poll": {"rate_ms: <desired_rate>"}}`).
+
+### Model Error Handling
+
+All models will return descriptive errors instead of fallback values when they lack sufficient data. This provides clear feedback about what's needed for successful predictions.
+
+**Common Error Scenarios:**
+
+- **Empty block distributions**: All historical models require at least one block distribution
+- **No transactions**: Models need blocks that contain actual transaction data to analyze
+- **Missing pending data**: The `pending_floor` model specifically requires pending block distribution data
+
+**Error Message Examples:**
+
+- `"LastMin model requires at least one block distribution"`
+- `"Percentile model requires blocks with transactions"`
+- `"PendingFloor model requires pending block distribution data"`
+
+When a model returns an error, check that:
+
+1. You're providing the correct type of data for the model
+2. Your block distributions contain actual transaction data
+3. For `pending_floor`, you're providing the `pending_block_distribution` parameter
 
 ### Creating Custom Models
 
@@ -327,6 +367,7 @@ pub enum ModelKind {
     Percentile,
     TimeSeries,
     LastMin,
+    PendingFloor,
     YourCustomModel,  // Add this line
 }
 ```
@@ -441,7 +482,7 @@ cargo run -- start --chains '[{
 
 ## Settlement Times and Block Windows
 
-As a prediction provider, you can generate gas price predictions for different settlement windows that end users will consume to price their transactions. Each settlement time represents a different urgency level and block window that your predictions target.
+As a prediction provider, you can generate gas price predictions for different settlement times that end users will consume to price their transactions. Each settlement time represents a different urgency level and block window that your predictions target. A settlement `BlockWindow` is derived from the `from_block` parameter and `Settlement` enum. The `from_block` must be a future block number and is typically set to the next block.
 
 ### Settlement Options for Prediction Models
 
