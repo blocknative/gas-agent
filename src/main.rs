@@ -3,6 +3,7 @@ use anyhow::anyhow;
 use anyhow::{Context, Result};
 use clap::Parser;
 use config::{ChainConfig, Cli, Commands};
+use dotenv::dotenv;
 use interrupts::{on_panic, on_sigterm};
 use logs::init_logs;
 use server::start_server_without_state;
@@ -29,6 +30,7 @@ mod utils;
 
 #[ntex::main]
 async fn main() -> Result<()> {
+    dotenv().ok();
     init_logs();
 
     let cli = Cli::parse();
