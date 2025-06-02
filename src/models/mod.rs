@@ -67,7 +67,7 @@ mod tests {
         // Should be minimum (5.0) + 1 wei (0.000000001)
         let expected = 5.0 + 0.000000001;
         assert_eq!(price, crate::utils::round_to_9_places(expected));
-        assert_eq!(settlement, Settlement::Fast);
+        assert_eq!(settlement, Settlement::Immediate);
     }
 
     #[tokio::test]
