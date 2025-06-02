@@ -285,13 +285,22 @@ fn parse_transactions(block: &Value) -> Result<Vec<Transaction>> {
                     .ok_or(anyhow!("Missing or invalid transaction hash"))?
                     .to_string();
 
-                // All fee fields are optional in our struct
+                // Parse fee fields
                 let gas_price = tx["gasPrice"].as_str().map(parse_hex_to_u128);
-
                 let max_fee_per_gas = tx["maxFeePerGas"].as_str().map(parse_hex_to_u128);
-
                 let max_priority_fee_per_gas =
                     tx["maxPriorityFeePerGas"].as_str().map(parse_hex_to_u128);
+
+                // Validate gas pricing: either gas_price OR (max_fee_per_gas AND max_priority_fee_per_gas)
+                let has_legacy_pricing = gas_price.is_some();
+                let has_eip1559_pricing = max_fee_per_gas.is_some() && max_priority_fee_per_gas.is_some();
+
+                if !has_legacy_pricing && !has_eip1559_pricing {
+                    return Err(anyhow!(
+                        "Transaction {} missing valid gas pricing: must have either gasPrice or both maxFeePerGas and maxPriorityFeePerGas",
+                        tx_hash
+                    ));
+                }
 
                 Ok(Transaction {
                     hash: tx_hash,
@@ -303,5 +312,172 @@ fn parse_transactions(block: &Value) -> Result<Vec<Transaction>> {
             .collect::<Result<Vec<Transaction>>>()
     } else {
         Err(anyhow!("Missing or invalid transactions array"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_parse_transactions_with_legacy_pricing() {
+        let block_data = json!({
+            "transactions": [
+                {
+                    "hash": "0x1234567890abcdef",
+                    "gasPrice": "0x12a05f200"
+                }
+            ]
+        });
+
+        let result = parse_transactions(&block_data).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].hash, "0x1234567890abcdef");
+        assert_eq!(result[0].gas_price, Some(5000000000));
+        assert_eq!(result[0].max_fee_per_gas, None);
+        assert_eq!(result[0].max_priority_fee_per_gas, None);
+    }
+
+    #[test]
+    fn test_parse_transactions_with_eip1559_pricing() {
+        let block_data = json!({
+            "transactions": [
+                {
+                    "hash": "0xabcdef1234567890",
+                    "maxFeePerGas": "0x174876e800",
+                    "maxPriorityFeePerGas": "0x3b9aca00"
+                }
+            ]
+        });
+
+        let result = parse_transactions(&block_data).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].hash, "0xabcdef1234567890");
+        assert_eq!(result[0].gas_price, None);
+        assert_eq!(result[0].max_fee_per_gas, Some(100000000000));
+        assert_eq!(result[0].max_priority_fee_per_gas, Some(1000000000));
+    }
+
+    #[test]
+    fn test_parse_transactions_with_both_pricing_types() {
+        let block_data = json!({
+            "transactions": [
+                {
+                    "hash": "0x1111111111111111",
+                    "gasPrice": "0x12a05f200",
+                    "maxFeePerGas": "0x174876e800",
+                    "maxPriorityFeePerGas": "0x3b9aca00"
+                }
+            ]
+        });
+
+        let result = parse_transactions(&block_data).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].hash, "0x1111111111111111");
+        assert_eq!(result[0].gas_price, Some(5000000000));
+        assert_eq!(result[0].max_fee_per_gas, Some(100000000000));
+        assert_eq!(result[0].max_priority_fee_per_gas, Some(1000000000));
+    }
+
+    #[test]
+    fn test_parse_transactions_missing_gas_price() {
+        let block_data = json!({
+            "transactions": [
+                {
+                    "hash": "0x2222222222222222"
+                }
+            ]
+        });
+
+        let result = parse_transactions(&block_data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("missing valid gas pricing"));
+    }
+
+    #[test]
+    fn test_parse_transactions_incomplete_eip1559_pricing() {
+        let block_data = json!({
+            "transactions": [
+                {
+                    "hash": "0x3333333333333333",
+                    "maxFeePerGas": "0x174876e800"
+                    // Missing maxPriorityFeePerGas
+                }
+            ]
+        });
+
+        let result = parse_transactions(&block_data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("missing valid gas pricing"));
+    }
+
+    #[test]
+    fn test_parse_transactions_multiple_valid_transactions() {
+        let block_data = json!({
+            "transactions": [
+                {
+                    "hash": "0x4444444444444444",
+                    "gasPrice": "0x12a05f200"
+                },
+                {
+                    "hash": "0x5555555555555555",
+                    "maxFeePerGas": "0x174876e800",
+                    "maxPriorityFeePerGas": "0x3b9aca00"
+                }
+            ]
+        });
+
+        let result = parse_transactions(&block_data).unwrap();
+        assert_eq!(result.len(), 2);
+        
+        // First transaction (legacy)
+        assert_eq!(result[0].hash, "0x4444444444444444");
+        assert_eq!(result[0].gas_price, Some(5000000000));
+        assert_eq!(result[0].max_fee_per_gas, None);
+        assert_eq!(result[0].max_priority_fee_per_gas, None);
+        
+        // Second transaction (EIP-1559)
+        assert_eq!(result[1].hash, "0x5555555555555555");
+        assert_eq!(result[1].gas_price, None);
+        assert_eq!(result[1].max_fee_per_gas, Some(100000000000));
+        assert_eq!(result[1].max_priority_fee_per_gas, Some(1000000000));
+    }
+
+    #[test]
+    fn test_parse_transactions_missing_hash() {
+        let block_data = json!({
+            "transactions": [
+                {
+                    "gasPrice": "0x12a05f200"
+                    // Missing hash
+                }
+            ]
+        });
+
+        let result = parse_transactions(&block_data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing or invalid transaction hash"));
+    }
+
+    #[test]
+    fn test_parse_transactions_empty_array() {
+        let block_data = json!({
+            "transactions": []
+        });
+
+        let result = parse_transactions(&block_data).unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_transactions_missing_transactions_field() {
+        let block_data = json!({
+            "number": "0x1"
+        });
+
+        let result = parse_transactions(&block_data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing or invalid transactions array"));
     }
 }

@@ -38,9 +38,9 @@ pub fn get_prediction_pending_floor(
 
     // Find the minimum gas price in the pending block distribution
     let min_price = pending_distribution
-        .first()
-        .map(|dist| dist.gwei)
-        .unwrap_or(0.0);
+        .iter()
+        .map(|bucket| bucket.gwei)
+        .fold(f64::INFINITY, |min, price| if price < min { price } else { min });
 
     // Add 1 wei to the minimum price to ensure inclusion
     let prediction = min_price + ONE_WEI_IN_GWEI;
@@ -79,7 +79,7 @@ mod tests {
         // Should be minimum (8.0) + 1 wei (0.000000001)
         let expected = 8.0 + ONE_WEI_IN_GWEI;
         assert_eq!(price, round_to_9_places(expected));
-        assert_eq!(settlement, Settlement::Fast);
+        assert_eq!(settlement, Settlement::Immediate);
     }
 
     #[test]
@@ -120,7 +120,7 @@ mod tests {
         // Should be 25.5 + 1 wei
         let expected = 25.5 + ONE_WEI_IN_GWEI;
         assert_eq!(price, round_to_9_places(expected));
-        assert_eq!(settlement, Settlement::Fast);
+        assert_eq!(settlement, Settlement::Immediate);
     }
 
     #[test]
@@ -141,7 +141,7 @@ mod tests {
         // Should be 0.0 + 1 wei
         let expected = 0.0 + ONE_WEI_IN_GWEI;
         assert_eq!(price, round_to_9_places(expected));
-        assert_eq!(settlement, Settlement::Fast);
+        assert_eq!(settlement, Settlement::Immediate);
     }
 
     #[test]
@@ -156,6 +156,6 @@ mod tests {
         // Should be properly rounded to 9 decimal places
         let expected = 1.123456789123456789 + ONE_WEI_IN_GWEI;
         assert_eq!(price, round_to_9_places(expected));
-        assert_eq!(settlement, Settlement::Fast);
+        assert_eq!(settlement, Settlement::Immediate);
     }
 }

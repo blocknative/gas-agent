@@ -215,7 +215,16 @@ Currently, JSON RPC is the only source available, but other sources are coming s
 
 ##### Expected RPC Response Structure
 
-The pending block RPC endpoint must return a JSON-RPC 2.0 response containing a `transactions` field with an array of transaction objects. The system is flexible and only requires minimal transaction data:
+The pending block RPC endpoint must return a JSON-RPC 2.0 response containing a required `transactions` field with an array of transaction objects. Each transaction object has the following requirements:
+
+**Required fields:**
+
+- `hash`: Transaction hash identifier
+
+**Gas price fields (one of the following combinations):**
+
+- `gasPrice`: Legacy gas price (for pre-EIP-1559 transactions)
+- OR `maxFeePerGas` AND `maxPriorityFeePerGas`: EIP-1559 gas price fields (both required together)
 
 ```json
 {
@@ -225,7 +234,6 @@ The pending block RPC endpoint must return a JSON-RPC 2.0 response containing a 
     "transactions": [
       {
         "hash": "0x1234567890abcdef...",
-        "gasPrice": "0x174876e800",
         "maxFeePerGas": "0x174876e800",
         "maxPriorityFeePerGas": "0x59682f00"
       },
@@ -237,19 +245,6 @@ The pending block RPC endpoint must return a JSON-RPC 2.0 response containing a 
   }
 }
 ```
-
-**Required Fields:**
-
-- **`transactions`**: Array of transaction objects
-- **`hash`**: Transaction hash (string)
-
-**Optional Fields (per transaction):**
-
-- **`gasPrice`**: Legacy gas price in wei (hex string) - for pre-EIP-1559 transactions
-- **`maxFeePerGas`**: Maximum total fee per gas in wei (hex string) - for EIP-1559 transactions
-- **`maxPriorityFeePerGas`**: Maximum priority fee per gas in wei (hex string) - for EIP-1559 transactions
-
-The system automatically handles both legacy transactions (using `gasPrice`) and EIP-1559 transactions (using `maxFeePerGas`/`maxPriorityFeePerGas`). All fee fields are optional, making the parser flexible enough to work with various data sources and transaction types.
 
 #### Agent Configuration
 
