@@ -212,8 +212,7 @@ pub struct Transaction {
 }
 
 pub fn get_rpc_client(rpc_url: Url) -> RpcClient {
-    let client = RpcClient::new(rpc_url.to_string());
-    client
+    RpcClient::new(rpc_url.to_string())
 }
 
 pub async fn get_latest_block(client: &RpcClient) -> Result<Block> {

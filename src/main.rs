@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
                 return Err(anyhow!("No chains configured"));
             }
 
-            let server_address = config.server_address.clone();
+            let server_address = config.server_address;
 
             // log panics
             on_panic(|panic_info| error!(error = %panic_info, "Panic detected!!"));
