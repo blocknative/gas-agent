@@ -37,10 +37,14 @@ pub fn get_prediction_pending_floor(
     }
 
     // Find the minimum gas price in the pending block distribution
-    let min_price = pending_distribution
-        .iter()
-        .map(|bucket| bucket.gwei)
-        .fold(f64::INFINITY, |min, price| if price < min { price } else { min });
+    let min_price =
+        pending_distribution
+            .iter()
+            .map(|bucket| bucket.gwei)
+            .fold(
+                f64::INFINITY,
+                |min, price| if price < min { price } else { min },
+            );
 
     // Add 1 wei to the minimum price to ensure inclusion
     let prediction = min_price + ONE_WEI_IN_GWEI;
@@ -147,14 +151,14 @@ mod tests {
     #[test]
     fn test_pending_floor_rounding() {
         let pending_distribution = vec![Bucket {
-            gwei: 1.123456789123456789,
+            gwei: 1.123456789,
             count: 1,
         }];
 
         let (price, settlement) = get_prediction_pending_floor(Some(pending_distribution)).unwrap();
 
         // Should be properly rounded to 9 decimal places
-        let expected = 1.123456789123456789 + ONE_WEI_IN_GWEI;
+        let expected = 1.123456789 + ONE_WEI_IN_GWEI;
         assert_eq!(price, round_to_9_places(expected));
         assert_eq!(settlement, Settlement::Immediate);
     }

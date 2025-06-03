@@ -29,7 +29,7 @@ pub fn block_to_block_distribution(
                 gas_price,
                 max_fee_per_gas,
                 max_priority_fee_per_gas,
-                &base_fee,
+                base_fee,
             ) {
                 std::result::Result::Ok(effective_gas_price) => {
                     distribution.add(effective_gas_price)
@@ -38,7 +38,7 @@ pub fn block_to_block_distribution(
                     eprint!(
                         "Failed to calculate miner reward for transaction with hash: {}, error: {}",
                         &hash,
-                        e.to_string()
+                        e
                     );
                 }
             }
@@ -78,7 +78,7 @@ pub fn calc_fee_gwei(
 ) -> Result<f64> {
     let base_fee_per_gas = base_fee_per_gas.ok_or(anyhow!("No base fee per gas value"))?;
     if let Some(gas_price) = gas_price {
-        wei_to_gwei(gas_price.clone())
+        wei_to_gwei(*gas_price)
     } else {
         let max_fee_per_gas =
             max_fee_per_gas.ok_or(anyhow!("Missing max_fee_per_gas for effective calc"))?;

@@ -71,8 +71,7 @@ impl GasAgent {
         let last_distribution = block_distributions.last();
 
         let actual_min = last_distribution
-            .map(|dist| dist.get(0).map(|dist| dist.gwei))
-            .flatten()
+            .and_then(|dist| dist.first().map(|dist| dist.gwei))
             .unwrap_or(0.0);
 
         match &agent.kind {
@@ -83,7 +82,7 @@ impl GasAgent {
                 };
 
                 let (price, settlement) =
-                    apply_model(&model, &block_distributions, pending_block_distribution).await?;
+                    apply_model(model, &block_distributions, pending_block_distribution).await?;
 
                 let chain_tip = self.chain_tip.read().await.clone();
                 let payload = AgentPayload {
@@ -204,7 +203,7 @@ impl GasAgent {
             // wait estimated block time
             let estimated_block_time_ms = {
                 let guard = self.estimated_block_time_ms.read().await;
-                guard.clone()
+                *guard
             };
 
             let wait = Duration::from_millis(estimated_block_time_ms as u64);
@@ -327,7 +326,7 @@ impl GasAgent {
 /// Will prefer the block source if available, otherwise will use the rpc hosts.
 /// If using rpc_hosts, will loop through and find the first RPC that succesfully returns the chain tip
 pub async fn init_rpc_client(url: &str) -> Result<(RpcClient, u64, Block)> {
-    let rpc_url = Url::parse(&url).context("Invalid block JSON rpc url")?;
+    let rpc_url = Url::parse(url).context("Invalid block JSON rpc url")?;
     let client = get_rpc_client(rpc_url);
 
     let chain_id = client.get_chain_id().await?;

@@ -10,7 +10,7 @@ pub async fn start_server_without_state(
     server_address: &SocketAddr,
     configure_app: Option<ConfigFn>,
 ) -> std::io::Result<()> {
-    start_server::<()>(&server_address, None, configure_app).await
+    start_server::<()>(server_address, None, configure_app).await
 }
 
 /// Starts a server that will serve metrics and probes

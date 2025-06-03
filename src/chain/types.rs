@@ -43,7 +43,7 @@ impl From<AgentPayload> for OraclePayloadV2 {
                 chain_id: chainid,
                 system_id: systemid,
                 timestamp: U48::from(payload.timestamp.timestamp_millis()),
-                length: 1 as u16,
+                length: 1,
             },
             records: vec![OraclePayloadRecordV2 {
                 typ: 340, // Hardcoded into type 340 - Max Priority Fee Per Gas 99th.
@@ -54,14 +54,8 @@ impl From<AgentPayload> for OraclePayloadV2 {
 }
 
 fn get_network_config_values(system: &System, network: &Network) -> (u8, u64) {
-    match system {
-        // System::Bitcoin => match network {
-        //     Network::Mainnet => (1, 1), // Infer system 1 chain 1 for btc mainnet
-        //     _ => (1, chain_id.clone()),
-        // },
-        _ => (
-            2,
-            SystemNetworkKey::new(system.clone(), network.clone()).to_chain_id(),
-        ),
-    }
+    (
+        2,
+        SystemNetworkKey::new(system.clone(), network.clone()).to_chain_id(),
+    )
 }
