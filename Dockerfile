@@ -32,4 +32,4 @@ COPY --from=builder /usr/local/bin/gas-agent /usr/local/bin/gas-agent
 USER ubuntu
 
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/gas-agent"]
+ENTRYPOINT ["/usr/local/bin/agent", "start"]
