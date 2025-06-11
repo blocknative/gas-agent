@@ -1,7 +1,9 @@
 FROM rust:slim-bookworm as builder
 
 WORKDIR /app
-COPY . .
+
+# Copy dependency files first for better caching
+COPY Cargo.toml Cargo.lock ./
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \

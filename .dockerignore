@@ -1,0 +1,61 @@
+# Build artifacts (let Docker cache handle these)
+target/
+**/*.rs.bk
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+
+# Documentation (not needed in build context)
+README.md
+CHANGELOG.md
+LICENSE*
+docs/
+*.md
+
+# Docker files (avoid recursive copying)
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+.docker/
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+
+# Development configuration
+.env
+.env.*
+.envrc
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Rust development files
+rust-toolchain.toml
+.cargo/config.toml
+
+# Test and example files
+tests/
+benches/
+examples/
