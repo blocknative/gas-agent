@@ -337,3 +337,413 @@ pub async fn init_rpc_client(url: &str) -> Result<(RpcClient, u64, Block)> {
 
     Ok((client, chain_id, block))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::distribution::Bucket;
+    use crate::rpc::Transaction;
+    use crate::types::{Network, System};
+    use chrono::TimeZone;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
+    fn create_test_transaction(
+        hash: &str,
+        gas_price: Option<u128>,
+        max_fee_per_gas: Option<u128>,
+        max_priority_fee_per_gas: Option<u128>,
+    ) -> Transaction {
+        Transaction {
+            hash: hash.to_string(),
+            gas_price,
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+        }
+    }
+
+    fn create_test_block(
+        number: u64,
+        timestamp_secs: i64,
+        transactions: Vec<Transaction>,
+        base_fee_per_gas: Option<u64>,
+    ) -> Block {
+        Block {
+            number,
+            timestamp: Utc.timestamp_opt(timestamp_secs, 0).unwrap(),
+            gas_limit: 30_000_000,
+            gas_used: 15_000_000,
+            base_fee_per_gas,
+            transactions,
+        }
+    }
+
+    fn create_test_gas_agent() -> GasAgent {
+        let chain_config = ChainConfig {
+            system: System::Ethereum,
+            network: Network::Mainnet,
+            json_rpc_url: "http://localhost:8545".to_string(),
+            pending_block_data_source: None,
+            agents: vec![],
+        };
+
+        let config = Config {
+            server_address: "0.0.0.0:8080".parse().unwrap(),
+            chains: "[]".to_string(),
+            collector_endpoint: "http://localhost:3000".parse().unwrap(),
+        };
+
+        let rpc_client = RpcClient::new("http://localhost:8545".to_string());
+
+        let initial_block = create_test_block(
+            1000,
+            1700000000,
+            vec![create_test_transaction(
+                "0xabc",
+                Some(20_000_000_000), // 20 gwei
+                None,
+                None,
+            )],
+            Some(10_000_000_000), // 10 gwei base fee
+        );
+
+        let initial_distribution = block_to_block_distribution(
+            &initial_block.transactions,
+            &initial_block.base_fee_per_gas,
+        );
+
+        GasAgent {
+            chain_config,
+            config,
+            rpc_client,
+            chain_tip: Arc::new(RwLock::new(initial_block.into())),
+            estimated_block_time_ms: Arc::new(RwLock::new(12000)),
+            block_distributions: Arc::new(RwLock::new(vec![initial_distribution])),
+            pending_block_distribution: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_chain_tip_update() {
+        let gas_agent = create_test_gas_agent();
+
+        // Initial chain tip should be block 1000
+        {
+            let chain_tip = gas_agent.chain_tip.read().await;
+            assert_eq!(chain_tip.number, 1000);
+            assert_eq!(chain_tip.timestamp.timestamp(), 1700000000);
+        }
+
+        // Create a new block
+        let new_block = create_test_block(
+            1001,
+            1700000012, // 12 seconds later
+            vec![create_test_transaction(
+                "0xdef",
+                Some(25_000_000_000), // 25 gwei
+                None,
+                None,
+            )],
+            Some(11_000_000_000), // 11 gwei base fee
+        );
+
+        // Handle the new block
+        gas_agent.handle_new_block(new_block).await.unwrap();
+
+        // Chain tip should be updated
+        {
+            let chain_tip = gas_agent.chain_tip.read().await;
+            assert_eq!(chain_tip.number, 1001);
+            assert_eq!(chain_tip.timestamp.timestamp(), 1700000012);
+            assert_eq!(chain_tip.base_fee_per_gas, Some(11_000_000_000));
+        }
+
+        // Estimated block time should be updated
+        {
+            let estimated_block_time = gas_agent.estimated_block_time_ms.read().await;
+            assert_eq!(*estimated_block_time, 12000); // 12 seconds * 1000
+        }
+    }
+
+    #[tokio::test]
+    async fn test_block_distributions_update() {
+        let gas_agent = create_test_gas_agent();
+
+        // Initial distribution should have one entry
+        {
+            let distributions = gas_agent.block_distributions.read().await;
+            assert_eq!(distributions.len(), 1);
+        }
+
+        // Add a new block with multiple transactions
+        let new_block = create_test_block(
+            1001,
+            1700000012,
+            vec![
+                create_test_transaction("0x1", Some(20_000_000_000), None, None), // 20 gwei
+                create_test_transaction("0x2", Some(25_000_000_000), None, None), // 25 gwei
+                create_test_transaction("0x3", Some(30_000_000_000), None, None), // 30 gwei
+                create_test_transaction("0x4", Some(0), None, None), // 0 gwei (should be excluded)
+            ],
+            Some(10_000_000_000),
+        );
+
+        gas_agent.handle_new_block(new_block).await.unwrap();
+
+        // Check distributions updated correctly
+        {
+            let distributions = gas_agent.block_distributions.read().await;
+            assert_eq!(distributions.len(), 2);
+
+            // The new distribution should have 3 entries (excluding 0 gwei transaction)
+            let last_dist = distributions.last().unwrap();
+            assert!(last_dist.len() >= 3); // At least 3 different price buckets
+
+            // Check that the distribution is sorted ascending
+            for i in 1..last_dist.len() {
+                assert!(last_dist[i].gwei >= last_dist[i - 1].gwei);
+            }
+
+            // Check that 0 gwei is not included
+            assert!(last_dist.iter().all(|bucket| bucket.gwei > 0.0));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_block_distributions_max_limit() {
+        let gas_agent = create_test_gas_agent();
+
+        // Add blocks until we exceed MAX_NUM_BLOCK_DISTRIBUTIONS
+        for i in 1..=55 {
+            let block = create_test_block(
+                1000 + i,
+                1700000000 + (i as i64 * 12),
+                vec![create_test_transaction(
+                    &format!("0x{:x}", i),
+                    Some(20_000_000_000 + (i as u128) * 1_000_000_000),
+                    None,
+                    None,
+                )],
+                Some(10_000_000_000),
+            );
+
+            gas_agent.handle_new_block(block).await.unwrap();
+        }
+
+        // Should only keep the last MAX_NUM_BLOCK_DISTRIBUTIONS (50)
+        {
+            let distributions = gas_agent.block_distributions.read().await;
+            assert_eq!(distributions.len(), MAX_NUM_BLOCK_DISTRIBUTIONS);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_target_agent_payload() {
+        let gas_agent = create_test_gas_agent();
+
+        // Create a block with various gas prices
+        let new_block = create_test_block(
+            1001,
+            1700000012,
+            vec![
+                create_test_transaction("0x1", Some(15_000_000_000), None, None), // 15 gwei (minimum non-zero)
+                create_test_transaction("0x2", Some(20_000_000_000), None, None), // 20 gwei
+                create_test_transaction("0x3", Some(25_000_000_000), None, None), // 25 gwei
+                create_test_transaction("0x4", Some(0), None, None), // 0 gwei (should be excluded)
+            ],
+            Some(10_000_000_000),
+        );
+
+        gas_agent.handle_new_block(new_block).await.unwrap();
+
+        // The Target agent should report the actual minimum (15 gwei) for the current block (1001)
+        // We can't directly test the published payload without mocking the publish function,
+        // but we can verify the distribution was created correctly
+        {
+            let distributions = gas_agent.block_distributions.read().await;
+            let last_dist = distributions.last().unwrap();
+
+            // The minimum should be 15 gwei (excluding 0 gas price)
+            let actual_min = last_dist.first().map(|bucket| bucket.gwei).unwrap_or(0.0);
+            assert_eq!(actual_min, 15.0);
+        }
+
+        // Verify chain tip is correct for Target payload
+        {
+            let chain_tip = gas_agent.chain_tip.read().await;
+            assert_eq!(chain_tip.number, 1001); // Target reports for current block
+        }
+    }
+
+    #[tokio::test]
+    async fn test_model_agent_payload_from_block() {
+        let gas_agent = create_test_gas_agent();
+
+        // Create and handle a new block
+        let new_block = create_test_block(
+            1001,
+            1700000012,
+            vec![create_test_transaction(
+                "0x1",
+                Some(20_000_000_000),
+                None,
+                None,
+            )],
+            Some(10_000_000_000),
+        );
+
+        gas_agent.handle_new_block(new_block).await.unwrap();
+
+        // Verify chain tip for Model payload
+        {
+            let chain_tip = gas_agent.chain_tip.read().await;
+            assert_eq!(chain_tip.number, 1001);
+            // Model agents should report from_block as chain_tip.number + 1 = 1002
+        }
+    }
+
+    #[tokio::test]
+    async fn test_zero_gas_price_exclusion() {
+        let gas_agent = create_test_gas_agent();
+
+        // Create a block with only zero gas price transactions
+        let block_with_zeros = create_test_block(
+            1001,
+            1700000012,
+            vec![
+                create_test_transaction("0x1", Some(0), None, None),
+                create_test_transaction("0x2", Some(0), None, None),
+            ],
+            Some(10_000_000_000),
+        );
+
+        gas_agent.handle_new_block(block_with_zeros).await.unwrap();
+
+        // The distribution should be empty (no non-zero prices)
+        {
+            let distributions = gas_agent.block_distributions.read().await;
+            let last_dist = distributions.last().unwrap();
+            assert_eq!(last_dist.len(), 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_eip1559_transaction_handling() {
+        let gas_agent = create_test_gas_agent();
+
+        // Create a block with EIP-1559 transactions
+        let new_block = create_test_block(
+            1001,
+            1700000012,
+            vec![
+                // Legacy transaction
+                create_test_transaction("0x1", Some(25_000_000_000), None, None),
+                // EIP-1559 transaction
+                create_test_transaction(
+                    "0x2",
+                    None,
+                    Some(30_000_000_000), // max_fee_per_gas
+                    Some(2_000_000_000), // max_priority_fee_per_gas (this will be used as it's less than max_fee - base_fee)
+                ),
+            ],
+            Some(10_000_000_000), // base fee
+        );
+
+        gas_agent.handle_new_block(new_block).await.unwrap();
+
+        // Check that both transaction types were processed
+        {
+            let distributions = gas_agent.block_distributions.read().await;
+            let last_dist = distributions.last().unwrap();
+
+            // Should have entries for both transactions
+            assert!(last_dist.len() >= 2);
+
+            // The EIP-1559 transaction should result in 2 gwei (priority fee)
+            assert!(last_dist
+                .iter()
+                .any(|bucket| (bucket.gwei - 2.0).abs() < 0.001));
+
+            // The legacy transaction should result in 25 gwei
+            assert!(last_dist
+                .iter()
+                .any(|bucket| (bucket.gwei - 25.0).abs() < 0.001));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_multiple_block_gap_handling() {
+        let gas_agent = create_test_gas_agent();
+
+        // Initial block is 1000, jump to block 1005 (gap of 5)
+        let new_block = create_test_block(
+            1005,
+            1700000060, // 60 seconds later
+            vec![create_test_transaction(
+                "0x1",
+                Some(20_000_000_000),
+                None,
+                None,
+            )],
+            Some(10_000_000_000),
+        );
+
+        gas_agent.handle_new_block(new_block).await.unwrap();
+
+        // Check that estimated block time is calculated correctly for the gap
+        {
+            let estimated_block_time = gas_agent.estimated_block_time_ms.read().await;
+            // 60 seconds / 5 blocks = 12 seconds per block = 12000 ms
+            assert_eq!(*estimated_block_time, 12000);
+        }
+
+        // Chain tip should jump to block 1005
+        {
+            let chain_tip = gas_agent.chain_tip.read().await;
+            assert_eq!(chain_tip.number, 1005);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_pending_block_distribution() {
+        let gas_agent = create_test_gas_agent();
+
+        // Initially no pending block distribution
+        {
+            let pending = gas_agent.pending_block_distribution.read().await;
+            assert!(pending.is_none());
+        }
+
+        // Simulate setting a pending block distribution
+        let pending_dist = vec![
+            Bucket {
+                gwei: 15.0,
+                count: 5,
+            },
+            Bucket {
+                gwei: 20.0,
+                count: 10,
+            },
+            Bucket {
+                gwei: 25.0,
+                count: 3,
+            },
+        ];
+
+        {
+            let mut pending = gas_agent.pending_block_distribution.write().await;
+            *pending = Some(pending_dist.clone());
+        }
+
+        // Verify it was set
+        {
+            let pending = gas_agent.pending_block_distribution.read().await;
+            assert!(pending.is_some());
+            let dist = pending.as_ref().unwrap();
+            assert_eq!(dist.len(), 3);
+            assert_eq!(dist[0].gwei, 15.0);
+            assert_eq!(dist[1].gwei, 20.0);
+            assert_eq!(dist[2].gwei, 25.0);
+        }
+    }
+}
