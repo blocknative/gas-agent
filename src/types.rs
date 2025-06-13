@@ -175,6 +175,23 @@ impl SystemNetworkKey {
             } => 137,
         }
     }
+
+    pub fn to_block_time(&self) -> u64 {
+        match self {
+            SystemNetworkKey {
+                system: System::Ethereum,
+                network: Network::Mainnet,
+            } => 12000,
+            SystemNetworkKey {
+                system: System::Base,
+                network: Network::Mainnet,
+            } => 2000,
+            SystemNetworkKey {
+                system: System::Polygon,
+                network: Network::Mainnet,
+            } => 2000,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

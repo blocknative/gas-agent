@@ -9,16 +9,22 @@ use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
 use anyhow::{anyhow, Result};
 
-pub fn get_prediction_distribution(block_distributions: &[BlockDistribution]) -> Result<(f64, Settlement)> {
+pub fn get_prediction_distribution(
+    block_distributions: &[BlockDistribution],
+) -> Result<(f64, Settlement)> {
     if block_distributions.is_empty() {
-        return Err(anyhow!("DistributionAnalysis model requires at least one block distribution"));
+        return Err(anyhow!(
+            "DistributionAnalysis model requires at least one block distribution"
+        ));
     }
-    
+
     let latest_block = block_distributions.last().unwrap();
 
     // Focus on most recent block for distribution analysis
     if latest_block.is_empty() {
-        return Err(anyhow!("DistributionAnalysis model requires non-empty latest block"));
+        return Err(anyhow!(
+            "DistributionAnalysis model requires non-empty latest block"
+        ));
     }
 
     // Sort buckets by gas price

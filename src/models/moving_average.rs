@@ -11,7 +11,9 @@ use anyhow::{anyhow, Result};
 
 pub fn get_prediction_swma(block_distributions: &[BlockDistribution]) -> Result<(f64, Settlement)> {
     if block_distributions.is_empty() {
-        return Err(anyhow!("MovingAverage model requires at least one block distribution"));
+        return Err(anyhow!(
+            "MovingAverage model requires at least one block distribution"
+        ));
     }
     // Use up to 10 most recent blocks
     let num_blocks = 10.min(block_distributions.len());
@@ -41,13 +43,17 @@ pub fn get_prediction_swma(block_distributions: &[BlockDistribution]) -> Result<
     }
 
     if !has_transactions {
-        return Err(anyhow!("MovingAverage model requires blocks with transactions"));
+        return Err(anyhow!(
+            "MovingAverage model requires blocks with transactions"
+        ));
     }
 
     let predicted_price = if weight_sum > 0.0 {
         weighted_sum / weight_sum
     } else {
-        return Err(anyhow!("MovingAverage model requires blocks with transactions"));
+        return Err(anyhow!(
+            "MovingAverage model requires blocks with transactions"
+        ));
     };
 
     Ok((round_to_9_places(predicted_price), Settlement::Fast))
