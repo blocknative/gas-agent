@@ -11,9 +11,13 @@ use anyhow::{anyhow, Result};
 
 use super::moving_average::get_prediction_swma;
 
-pub fn get_prediction_time_series(block_distributions: &[BlockDistribution]) -> Result<(f64, Settlement)> {
+pub fn get_prediction_time_series(
+    block_distributions: &[BlockDistribution],
+) -> Result<(f64, Settlement)> {
     if block_distributions.is_empty() {
-        return Err(anyhow!("TimeSeries model requires at least one block distribution"));
+        return Err(anyhow!(
+            "TimeSeries model requires at least one block distribution"
+        ));
     }
     // Need more blocks for time series analysis
     let num_blocks = 20.min(block_distributions.len());
@@ -57,7 +61,9 @@ pub fn get_prediction_time_series(block_distributions: &[BlockDistribution]) -> 
     }
 
     if median_prices.is_empty() {
-        return Err(anyhow!("TimeSeries model requires blocks with transactions"));
+        return Err(anyhow!(
+            "TimeSeries model requires blocks with transactions"
+        ));
     }
 
     // Simple linear regression

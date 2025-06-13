@@ -391,7 +391,10 @@ mod tests {
 
         let result = parse_transactions(&block_data);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("missing valid gas pricing"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("missing valid gas pricing"));
     }
 
     #[test]
@@ -408,7 +411,10 @@ mod tests {
 
         let result = parse_transactions(&block_data);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("missing valid gas pricing"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("missing valid gas pricing"));
     }
 
     #[test]
@@ -429,13 +435,13 @@ mod tests {
 
         let result = parse_transactions(&block_data).unwrap();
         assert_eq!(result.len(), 2);
-        
+
         // First transaction (legacy)
         assert_eq!(result[0].hash, "0x4444444444444444");
         assert_eq!(result[0].gas_price, Some(5000000000));
         assert_eq!(result[0].max_fee_per_gas, None);
         assert_eq!(result[0].max_priority_fee_per_gas, None);
-        
+
         // Second transaction (EIP-1559)
         assert_eq!(result[1].hash, "0x5555555555555555");
         assert_eq!(result[1].gas_price, None);
@@ -456,7 +462,10 @@ mod tests {
 
         let result = parse_transactions(&block_data);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing or invalid transaction hash"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing or invalid transaction hash"));
     }
 
     #[test]
@@ -477,6 +486,9 @@ mod tests {
 
         let result = parse_transactions(&block_data);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing or invalid transactions array"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing or invalid transactions array"));
     }
 }

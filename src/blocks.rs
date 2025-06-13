@@ -37,8 +37,7 @@ pub fn block_to_block_distribution(
                 Err(e) => {
                     eprint!(
                         "Failed to calculate miner reward for transaction with hash: {}, error: {}",
-                        &hash,
-                        e
+                        &hash, e
                     );
                 }
             }

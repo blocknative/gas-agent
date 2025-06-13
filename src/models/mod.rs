@@ -17,8 +17,6 @@ mod pending_floor;
 mod percentile;
 mod time_series;
 
-
-
 /// Will apply a model to a list of block distribution and return a price
 /// Block distributions are sorted oldest to newest.
 pub async fn apply_model(
@@ -76,7 +74,10 @@ mod tests {
 
         // Should return an error when no pending distribution
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires pending block distribution"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires pending block distribution"));
     }
 
     #[test]
@@ -96,13 +97,19 @@ mod tests {
         // Test empty block distributions
         let result = apply_model(&ModelKind::LastMin, &[], None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires at least one block"));
 
         // Test empty last block
         let empty_block = vec![];
         let result = apply_model(&ModelKind::LastMin, &[empty_block], None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("non-empty block distribution"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("non-empty block distribution"));
     }
 
     #[tokio::test]
@@ -110,13 +117,19 @@ mod tests {
         // Test empty block distributions
         let result = apply_model(&ModelKind::Percentile, &[], None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires at least one block"));
 
         // Test blocks with no transactions
         let empty_blocks = vec![vec![], vec![]];
         let result = apply_model(&ModelKind::Percentile, &empty_blocks, None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("blocks with transactions"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("blocks with transactions"));
     }
 
     #[tokio::test]
@@ -124,13 +137,19 @@ mod tests {
         // Test empty block distributions
         let result = apply_model(&ModelKind::MovingAverage, &[], None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires at least one block"));
 
         // Test blocks with no transactions (should result in zero weight_sum)
         let empty_blocks = vec![vec![], vec![]];
         let result = apply_model(&ModelKind::MovingAverage, &empty_blocks, None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("blocks with transactions"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("blocks with transactions"));
     }
 
     #[tokio::test]
@@ -138,13 +157,19 @@ mod tests {
         // Test empty block distributions
         let result = apply_model(&ModelKind::AdaptiveThreshold, &[], None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires at least one block"));
 
         // Test blocks with no transactions
         let empty_blocks = vec![vec![], vec![]];
         let result = apply_model(&ModelKind::AdaptiveThreshold, &empty_blocks, None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("blocks with transactions"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("blocks with transactions"));
     }
 
     #[tokio::test]
@@ -152,13 +177,19 @@ mod tests {
         // Test empty block distributions
         let result = apply_model(&ModelKind::TimeSeries, &[], None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires at least one block"));
 
         // Test blocks with no transactions
         let empty_blocks = vec![vec![], vec![], vec![]];
         let result = apply_model(&ModelKind::TimeSeries, &empty_blocks, None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("blocks with transactions"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("blocks with transactions"));
     }
 
     #[tokio::test]
@@ -166,21 +197,36 @@ mod tests {
         // Test empty block distributions
         let result = apply_model(&ModelKind::DistributionAnalysis, &[], None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("requires at least one block"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires at least one block"));
 
         // Test empty latest block
         let empty_block = vec![];
         let result = apply_model(&ModelKind::DistributionAnalysis, &[empty_block], None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("non-empty latest block"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("non-empty latest block"));
     }
 
     #[tokio::test]
     async fn test_models_with_valid_data() {
         let valid_block = vec![
-            Bucket { gwei: 10.0, count: 5 },
-            Bucket { gwei: 15.0, count: 3 },
-            Bucket { gwei: 8.0, count: 2 },
+            Bucket {
+                gwei: 10.0,
+                count: 5,
+            },
+            Bucket {
+                gwei: 15.0,
+                count: 3,
+            },
+            Bucket {
+                gwei: 8.0,
+                count: 2,
+            },
         ];
         let blocks = vec![valid_block.clone(), valid_block.clone()];
 

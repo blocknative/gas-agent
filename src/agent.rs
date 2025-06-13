@@ -13,7 +13,7 @@ use reqwest::Url;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{debug, error, info, warn};
 
 const MAX_NUM_BLOCK_DISTRIBUTIONS: usize = 50;
 
@@ -28,7 +28,6 @@ struct GasAgent {
     config: Config,
     rpc_client: RpcClient,
     chain_tip: Arc<RwLock<BlockHeader>>,
-    estimated_block_time_ms: Arc<RwLock<i64>>,
     block_distributions: Arc<RwLock<Vec<BlockDistribution>>>,
     pending_block_distribution: Arc<RwLock<Option<BlockDistribution>>>,
 }
@@ -56,7 +55,6 @@ impl GasAgent {
             config: config.clone(),
             rpc_client,
             chain_tip: Arc::new(RwLock::new(latest_block.into())),
-            estimated_block_time_ms: Arc::new(RwLock::new(2000)),
             block_distributions: Arc::new(RwLock::new(vec![distribution])),
             pending_block_distribution: Arc::new(RwLock::new(None)),
         })
@@ -162,18 +160,14 @@ impl GasAgent {
 
     async fn handle_new_block(&self, block: Block) -> Result<()> {
         let new_chain_tip = BlockHeader::from(block.clone());
-        let current_chain_tip = { self.chain_tip.read().await.clone() };
-        let block_gap = new_chain_tip.number - current_chain_tip.number;
-
-        // update estimated block time
-        let duration = (new_chain_tip.timestamp - current_chain_tip.timestamp).num_milliseconds();
-        *self.estimated_block_time_ms.write().await = duration / block_gap as i64;
 
         let new_distribution =
             block_to_block_distribution(&block.transactions, &block.base_fee_per_gas);
 
         // Update chain tip
-        *self.chain_tip.write().await = new_chain_tip.clone();
+        {
+            *self.chain_tip.write().await = new_chain_tip.clone();
+        }
 
         // Update block distributions
         {
@@ -191,7 +185,13 @@ impl GasAgent {
 
         for agent in self.chain_config.agents.iter() {
             if matches!(&agent.prediction_trigger, &PredictionTrigger::Block) {
-                self.create_prediction(agent).await?;
+                let agent_clone = agent.clone();
+                let self_clone = self.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = self_clone.create_prediction(&agent_clone).await {
+                        error!(error = %e, "Failed to create prediction");
+                    }
+                });
             }
         }
 
@@ -199,15 +199,37 @@ impl GasAgent {
     }
 
     pub async fn poll_blocks(&self) {
+        // Get block time from the system network configuration
+        let system_network = SystemNetworkKey::new(
+            self.chain_config.system.clone(),
+            self.chain_config.network.clone(),
+        );
+
+        let block_time_ms = system_network.to_block_time();
+
         loop {
-            // wait estimated block time
-            let estimated_block_time_ms = {
-                let guard = self.estimated_block_time_ms.read().await;
-                *guard
+            // Calculate wait time based on chain tip timestamp
+            let chain_tip_timestamp = {
+                let chain_tip = self.chain_tip.read().await;
+                chain_tip.timestamp
             };
 
-            let wait = Duration::from_millis(estimated_block_time_ms as u64);
+            let now = chrono::Utc::now();
+            let time_since_last_block = (now - chain_tip_timestamp).num_milliseconds();
 
+            // Wait time = block_time - time_since_last_block
+            let wait_ms = if time_since_last_block < block_time_ms as i64 {
+                block_time_ms as i64 - time_since_last_block
+            } else {
+                0 // no wait if we're past the expected time
+            };
+
+            debug!(
+                "Waiting: {wait_ms}ms, Time Since Last Block: {}",
+                time_since_last_block
+            );
+
+            let wait = Duration::from_millis(wait_ms as u64);
             tokio::time::sleep(wait).await;
 
             let mut get_new_block = true;
@@ -215,16 +237,32 @@ impl GasAgent {
             while get_new_block {
                 match get_latest_block(&self.rpc_client).await {
                     Ok(block) => {
+                        debug!(
+                            "Block for System: {}, Network: {}, Height {}",
+                            &self.chain_config.system, &self.chain_config.network, block.number
+                        );
+
                         let current_height = { self.chain_tip.read().await.number };
+
                         if block.number > current_height {
+                            let gap = block.number - current_height;
+
+                            if gap > 1 {
+                                warn!(
+                                    "Missed blocks for System: {}, Network: {}! Last block height: {}, new block height: {}, GAP: {}",
+                                    &self.chain_config.system, &self.chain_config.network,
+                                    current_height, block.number, gap
+                                );
+                            }
+
                             if let Err(e) = self.handle_new_block(block).await {
                                 error!(error = %e, "Failed to handle new block");
                             }
 
                             get_new_block = false;
                         } else {
-                            // No new block updated yet, wait 1 sec until our block time becomes more accurate
-                            tokio::time::sleep(Duration::from_millis(1000)).await;
+                            // No new block updated yet, wait 250ms and try again
+                            tokio::time::sleep(Duration::from_millis(250)).await;
                         }
                     }
                     Err(e) => {
@@ -417,7 +455,6 @@ mod tests {
             config,
             rpc_client,
             chain_tip: Arc::new(RwLock::new(initial_block.into())),
-            estimated_block_time_ms: Arc::new(RwLock::new(12000)),
             block_distributions: Arc::new(RwLock::new(vec![initial_distribution])),
             pending_block_distribution: Arc::new(RwLock::new(None)),
         }
@@ -456,12 +493,6 @@ mod tests {
             assert_eq!(chain_tip.number, 1001);
             assert_eq!(chain_tip.timestamp.timestamp(), 1700000012);
             assert_eq!(chain_tip.base_fee_per_gas, Some(11_000_000_000));
-        }
-
-        // Estimated block time should be updated
-        {
-            let estimated_block_time = gas_agent.estimated_block_time_ms.read().await;
-            assert_eq!(*estimated_block_time, 12000); // 12 seconds * 1000
         }
     }
 
@@ -689,13 +720,6 @@ mod tests {
         );
 
         gas_agent.handle_new_block(new_block).await.unwrap();
-
-        // Check that estimated block time is calculated correctly for the gap
-        {
-            let estimated_block_time = gas_agent.estimated_block_time_ms.read().await;
-            // 60 seconds / 5 blocks = 12 seconds per block = 12000 ms
-            assert_eq!(*estimated_block_time, 12000);
-        }
 
         // Chain tip should jump to block 1005
         {
