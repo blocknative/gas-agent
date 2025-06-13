@@ -5,30 +5,32 @@ This approach analyzes the cumulative distribution function (CDF) of gas prices 
 How it works: This algorithm analyzes how gas prices are distributed in the most recent block, constructing a cumulative distribution function. It then identifies the "sweet spot" where the rate of change in the CDF decreases significantly. This is often where many transactions are being included, representing an efficient gas price.
 */
 
+use crate::models::{FromBlock, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
 use anyhow::{anyhow, Result};
 
 pub fn get_prediction_distribution(
     block_distributions: &[BlockDistribution],
-) -> Result<(f64, Settlement)> {
+    latest_block: u64,
+) -> Result<(Prediction, Settlement, FromBlock)> {
     if block_distributions.is_empty() {
         return Err(anyhow!(
             "DistributionAnalysis model requires at least one block distribution"
         ));
     }
 
-    let latest_block = block_distributions.last().unwrap();
+    let latest_block_distribution = block_distributions.last().unwrap();
 
     // Focus on most recent block for distribution analysis
-    if latest_block.is_empty() {
+    if latest_block_distribution.is_empty() {
         return Err(anyhow!(
             "DistributionAnalysis model requires non-empty latest block"
         ));
     }
 
     // Sort buckets by gas price
-    let mut sorted_buckets = latest_block.clone();
+    let mut sorted_buckets = latest_block_distribution.clone();
     sorted_buckets.sort_by(|a, b| {
         a.gwei
             .partial_cmp(&b.gwei)
@@ -76,5 +78,5 @@ pub fn get_prediction_distribution(
     // Apply a small premium to ensure higher probability of inclusion
     let predicted_price = sweet_spot * 1.1;
 
-    Ok((round_to_9_places(predicted_price), Settlement::Fast))
+    Ok((round_to_9_places(predicted_price), Settlement::Fast, latest_block + 1))
 }

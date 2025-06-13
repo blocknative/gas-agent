@@ -2,13 +2,15 @@
 Simply takes the minimum of the last block.
 */
 
+use crate::models::{FromBlock, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
 use anyhow::{anyhow, Result};
 
 pub fn get_prediction_last_min(
     block_distributions: &[BlockDistribution],
-) -> Result<(f64, Settlement)> {
+    latest_block: u64,
+) -> Result<(Prediction, Settlement, FromBlock)> {
     let last_block_distribution = block_distributions
         .last()
         .ok_or_else(|| anyhow!("LastMin model requires at least one block distribution"))?;
@@ -25,5 +27,5 @@ pub fn get_prediction_last_min(
         .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or(0.0);
 
-    Ok((round_to_9_places(last_min), Settlement::Fast))
+    Ok((round_to_9_places(last_min), Settlement::Fast, latest_block + 1))
 }

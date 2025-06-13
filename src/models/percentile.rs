@@ -5,13 +5,15 @@ This approach analyzes the distribution of gas prices across recent blocks and s
 How it works: This algorithm collects all gas prices from recent blocks, sorts them, and finds the price at a specific percentile (75th in this case). This is particularly effective during periods of high volatility, as it targets a price that would have included 75% of recent transactions.
 */
 
+use crate::models::{FromBlock, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
 use anyhow::{anyhow, Result};
 
 pub fn get_prediction_percentile(
     block_distributions: &[BlockDistribution],
-) -> Result<(f64, Settlement)> {
+    latest_block: u64,
+) -> Result<(Prediction, Settlement, FromBlock)> {
     if block_distributions.is_empty() {
         return Err(anyhow!(
             "Percentile model requires at least one block distribution"
@@ -57,5 +59,5 @@ pub fn get_prediction_percentile(
         }
     }
 
-    Ok((round_to_9_places(percentile_price), Settlement::Fast))
+    Ok((round_to_9_places(percentile_price), Settlement::Fast, latest_block + 1))
 }

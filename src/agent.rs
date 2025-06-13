@@ -72,6 +72,8 @@ impl GasAgent {
             .and_then(|dist| dist.first().map(|dist| dist.gwei))
             .unwrap_or(0.0);
 
+        let latest_block = { self.chain_tip.read().await.number };
+
         match &agent.kind {
             AgentKind::Model(model) => {
                 let pending_block_distribution = {
@@ -79,12 +81,16 @@ impl GasAgent {
                     guard.clone()
                 };
 
-                let (price, settlement) =
-                    apply_model(model, &block_distributions, pending_block_distribution).await?;
+                let (price, settlement, from_block) = apply_model(
+                    model,
+                    &block_distributions,
+                    pending_block_distribution,
+                    latest_block,
+                )
+                .await?;
 
-                let chain_tip = self.chain_tip.read().await.clone();
                 let payload = AgentPayload {
-                    from_block: chain_tip.number + 1,
+                    from_block,
                     settlement,
                     timestamp: Utc::now(),
                     unit: FeeUnit::Gwei,
