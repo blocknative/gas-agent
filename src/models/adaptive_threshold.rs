@@ -1,3 +1,4 @@
+use crate::models::{FromBlock, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
 use anyhow::{anyhow, Result};
@@ -15,7 +16,8 @@ How it works: This algorithm finds the minimum gas price included in each recent
 
 pub fn get_prediction_adaptive_threshold(
     block_distributions: &[BlockDistribution],
-) -> Result<(f64, Settlement)> {
+    latest_block: u64,
+) -> Result<(Prediction, Settlement, FromBlock)> {
     // Handle empty input
     if block_distributions.is_empty() {
         return Err(anyhow!(
@@ -86,5 +88,9 @@ pub fn get_prediction_adaptive_threshold(
         .to_f64()
         .unwrap();
 
-    Ok((round_to_9_places(predicted_price), Settlement::Fast))
+    Ok((
+        round_to_9_places(predicted_price),
+        Settlement::Fast,
+        latest_block + 1,
+    ))
 }

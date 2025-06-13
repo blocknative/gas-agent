@@ -13,6 +13,7 @@ How it works:
 4. Returns this as the optimal price for immediate settlement
 */
 
+use crate::models::{FromBlock, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
 use anyhow::{anyhow, Result};
@@ -21,7 +22,8 @@ const ONE_WEI_IN_GWEI: f64 = 0.000000001; // 1 wei
 
 pub fn get_prediction_pending_floor(
     pending_block_distribution: Option<BlockDistribution>,
-) -> Result<(f64, Settlement)> {
+    latest_block: u64,
+) -> Result<(Prediction, Settlement, FromBlock)> {
     // If no pending block distribution is available, return an error
     let Some(pending_distribution) = pending_block_distribution else {
         return Err(anyhow!(
@@ -49,7 +51,7 @@ pub fn get_prediction_pending_floor(
     // Add 1 wei to the minimum price to ensure inclusion
     let prediction = min_price + ONE_WEI_IN_GWEI;
 
-    Ok((round_to_9_places(prediction), Settlement::Immediate))
+    Ok((round_to_9_places(prediction), Settlement::Immediate, latest_block + 1))
 }
 
 #[cfg(test)]
@@ -78,17 +80,18 @@ mod tests {
             },
         ];
 
-        let (price, settlement) = get_prediction_pending_floor(Some(pending_distribution)).unwrap();
+        let (price, settlement, from_block) = get_prediction_pending_floor(Some(pending_distribution), 100).unwrap();
 
         // Should be minimum (8.0) + 1 wei (0.000000001)
         let expected = 8.0 + ONE_WEI_IN_GWEI;
         assert_eq!(price, round_to_9_places(expected));
         assert_eq!(settlement, Settlement::Immediate);
+        assert_eq!(from_block, 101);
     }
 
     #[test]
     fn test_pending_floor_with_no_pending_distribution() {
-        let result = get_prediction_pending_floor(None);
+        let result = get_prediction_pending_floor(None, 100);
 
         // Should return an error when no pending distribution available
         assert!(result.is_err());
@@ -102,7 +105,7 @@ mod tests {
     fn test_pending_floor_with_empty_pending_distribution() {
         let pending_distribution = vec![];
 
-        let result = get_prediction_pending_floor(Some(pending_distribution));
+        let result = get_prediction_pending_floor(Some(pending_distribution), 100);
 
         // Should return an error when pending distribution is empty
         assert!(result.is_err());
@@ -119,12 +122,13 @@ mod tests {
             count: 10,
         }];
 
-        let (price, settlement) = get_prediction_pending_floor(Some(pending_distribution)).unwrap();
+        let (price, settlement, from_block) = get_prediction_pending_floor(Some(pending_distribution), 100).unwrap();
 
         // Should be 25.5 + 1 wei
         let expected = 25.5 + ONE_WEI_IN_GWEI;
         assert_eq!(price, round_to_9_places(expected));
         assert_eq!(settlement, Settlement::Immediate);
+        assert_eq!(from_block, 101);
     }
 
     #[test]
@@ -140,12 +144,13 @@ mod tests {
             },
         ];
 
-        let (price, settlement) = get_prediction_pending_floor(Some(pending_distribution)).unwrap();
+        let (price, settlement, from_block) = get_prediction_pending_floor(Some(pending_distribution), 100).unwrap();
 
         // Should be 0.0 + 1 wei
         let expected = 0.0 + ONE_WEI_IN_GWEI;
         assert_eq!(price, round_to_9_places(expected));
         assert_eq!(settlement, Settlement::Immediate);
+        assert_eq!(from_block, 101);
     }
 
     #[test]
@@ -155,11 +160,12 @@ mod tests {
             count: 1,
         }];
 
-        let (price, settlement) = get_prediction_pending_floor(Some(pending_distribution)).unwrap();
+        let (price, settlement, from_block) = get_prediction_pending_floor(Some(pending_distribution), 100).unwrap();
 
         // Should be properly rounded to 9 decimal places
         let expected = 1.123456789 + ONE_WEI_IN_GWEI;
         assert_eq!(price, round_to_9_places(expected));
         assert_eq!(settlement, Settlement::Immediate);
+        assert_eq!(from_block, 101);
     }
 }
