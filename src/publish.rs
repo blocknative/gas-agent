@@ -11,10 +11,12 @@ pub async fn publish_agent_payload(
 ) -> Result<()> {
     let client = Client::new();
     let signature = payload.sign(signer_key).await?;
+    let network_signature = payload.clone().network_signature(signer_key)?;
 
     let json = json!({
         "payload": payload,
-        "signature": signature
+        "signature": signature,
+        "network_signature": network_signature,
     });
 
     tracing::debug!("Publishing agent payload: {:?}", json);

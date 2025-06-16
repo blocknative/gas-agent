@@ -2,7 +2,7 @@
 // use alloy_primitives::aliases::{U240, U48};
 // use shared::types::AgentPayload;
 
-//
+// 
 // pub trait OracleConverter<A> {
 //     fn convert(&self, payload: A) -> OraclePayloadV2;
 // }

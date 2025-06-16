@@ -10,6 +10,8 @@ use serde_json::json;
 use std::{fmt, str::FromStr};
 use strum_macros::{Display, EnumString};
 
+use crate::chain::{sign::PayloadSigner, types::SignedOraclePayloadV2};
+
 #[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
 #[strum(serialize_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
@@ -127,6 +129,21 @@ impl AgentPayload {
         let signer: PrivateKeySigner = signer_key.parse()?;
         let signature = signer.sign_message(&message).await?;
         let hex_signature = hex::encode(signature.as_bytes());
+
+        Ok(format!("0x{}", hex_signature))
+    }
+
+    pub fn network_signature(self, signer_key: &str) -> Result<String> {
+        let mut opv2 = SignedOraclePayloadV2 {
+            payload: self.into(),
+            signature: None,
+        };
+
+        let mut buf = vec![];
+        let signer: PrivateKeySigner = signer_key.parse()?;
+        opv2.to_signed_payload(&mut buf, signer)?;
+
+        let hex_signature = hex::encode(opv2.signature.unwrap().as_bytes());
 
         Ok(format!("0x{}", hex_signature))
     }

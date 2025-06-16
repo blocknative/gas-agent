@@ -1,6 +1,15 @@
 use super::super::types::AgentPayload;
 use crate::types::{Network, System, SystemNetworkKey};
-use alloy::primitives::aliases::{U240, U48};
+use alloy::{
+    primitives::aliases::{U240, U48},
+    signers::Signature,
+};
+
+#[derive(Debug)]
+pub struct SignedOraclePayloadV2 {
+    pub payload: OraclePayloadV2,
+    pub signature: Option<Signature>,
+}
 
 #[derive(Debug, Clone)]
 pub struct OraclePayloadV2 {
