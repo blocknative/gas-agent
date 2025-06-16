@@ -16,7 +16,7 @@ pub async fn publish_agent_payload(
     let json = json!({
         "payload": payload,
         "signature": signature,
-    "network_signature": network_signature,
+        "network_signature": network_signature,
     });
 
     tracing::debug!("Publishing agent payload: {:?}", json);
