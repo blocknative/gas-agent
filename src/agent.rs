@@ -30,6 +30,7 @@ struct GasAgent {
     chain_tip: Arc<RwLock<BlockHeader>>,
     block_distributions: Arc<RwLock<Vec<BlockDistribution>>>,
     pending_block_distribution: Arc<RwLock<Option<BlockDistribution>>>,
+    client: reqwest::Client,
 }
 
 impl GasAgent {
@@ -57,6 +58,7 @@ impl GasAgent {
             chain_tip: Arc::new(RwLock::new(latest_block.into())),
             block_distributions: Arc::new(RwLock::new(vec![distribution])),
             pending_block_distribution: Arc::new(RwLock::new(None)),
+            client: reqwest::Client::new(),
         })
     }
 
@@ -101,6 +103,7 @@ impl GasAgent {
                 };
 
                 publish_agent_payload(
+                    &self.client,
                     self.config.collector_endpoint.as_str(),
                     &agent.signer_key,
                     &payload,
@@ -132,6 +135,7 @@ impl GasAgent {
                     };
 
                     publish_agent_payload(
+                        &self.client,
                         self.config.collector_endpoint.as_str(),
                         &agent.signer_key,
                         &payload,
@@ -153,6 +157,7 @@ impl GasAgent {
                 };
 
                 publish_agent_payload(
+                    &self.client,
                     self.config.collector_endpoint.as_str(),
                     &agent.signer_key,
                     &payload,
@@ -463,6 +468,7 @@ mod tests {
             chain_tip: Arc::new(RwLock::new(initial_block.into())),
             block_distributions: Arc::new(RwLock::new(vec![initial_distribution])),
             pending_block_distribution: Arc::new(RwLock::new(None)),
+            client: reqwest::Client::new(),
         }
     }
 
