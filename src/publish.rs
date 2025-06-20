@@ -5,11 +5,11 @@ use reqwest::Client;
 use serde_json::json;
 
 pub async fn publish_agent_payload(
+    client: &Client,
     collector_endpoint: &str,
     signer_key: &str,
     payload: &AgentPayload,
 ) -> Result<()> {
-    let client = Client::new();
     let signature = payload.sign(signer_key).await?;
     let network_signature = payload.clone().network_signature(signer_key)?;
 
