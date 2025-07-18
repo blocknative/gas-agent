@@ -86,8 +86,9 @@ pub fn calc_fee_gwei(
             "Missing max_priority_fee_per_gas for effective calc"
         ))?;
 
-        let a = max_fee_per_gas - base_fee_per_gas as u128;
-        let wei = a.min(max_priority_fee_per_gas);
+        let effective_gas_price =
+            max_fee_per_gas.min(base_fee_per_gas as u128 + max_priority_fee_per_gas);
+        let wei = effective_gas_price;
         wei_to_gwei(wei)
     }
 }

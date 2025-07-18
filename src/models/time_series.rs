@@ -102,5 +102,9 @@ pub fn get_prediction_time_series(
     let reasonable_max = max_observed * 1.5; // Allow up to 50% increase
     let predicted_price = predicted_price.min(reasonable_max);
 
-    Ok((round_to_9_places(predicted_price), Settlement::Fast, latest_block + 1))
+    Ok((
+        round_to_9_places(predicted_price),
+        Settlement::Fast,
+        latest_block + 1,
+    ))
 }

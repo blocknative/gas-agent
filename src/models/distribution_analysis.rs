@@ -78,5 +78,9 @@ pub fn get_prediction_distribution(
     // Apply a small premium to ensure higher probability of inclusion
     let predicted_price = sweet_spot * 1.1;
 
-    Ok((round_to_9_places(predicted_price), Settlement::Fast, latest_block + 1))
+    Ok((
+        round_to_9_places(predicted_price),
+        Settlement::Fast,
+        latest_block + 1,
+    ))
 }
