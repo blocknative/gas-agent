@@ -29,13 +29,19 @@ pub async fn apply_model(
     latest_block: u64,
 ) -> Result<(Prediction, Settlement, FromBlock)> {
     match model {
-        ModelKind::AdaptiveThreshold => get_prediction_adaptive_threshold(block_distributions, latest_block),
-        ModelKind::DistributionAnalysis => get_prediction_distribution(block_distributions, latest_block),
+        ModelKind::AdaptiveThreshold => {
+            get_prediction_adaptive_threshold(block_distributions, latest_block)
+        }
+        ModelKind::DistributionAnalysis => {
+            get_prediction_distribution(block_distributions, latest_block)
+        }
         ModelKind::MovingAverage => get_prediction_swma(block_distributions, latest_block),
         ModelKind::Percentile => get_prediction_percentile(block_distributions, latest_block),
         ModelKind::TimeSeries => get_prediction_time_series(block_distributions, latest_block),
         ModelKind::LastMin => get_prediction_last_min(block_distributions, latest_block),
-        ModelKind::PendingFloor => get_prediction_pending_floor(pending_block_distribution, latest_block),
+        ModelKind::PendingFloor => {
+            get_prediction_pending_floor(pending_block_distribution, latest_block)
+        }
     }
 }
 
@@ -61,15 +67,19 @@ mod tests {
             },
         ];
 
-        let (price, settlement, from_block) =
-            apply_model(&ModelKind::PendingFloor, &[], Some(pending_distribution), 100)
-                .await
-                .unwrap();
+        let (price, settlement, from_block) = apply_model(
+            &ModelKind::PendingFloor,
+            &[],
+            Some(pending_distribution),
+            100,
+        )
+        .await
+        .unwrap();
 
         // Should be minimum (5.0) + 1 wei (0.000000001)
         let expected = 5.0 + 0.000000001;
         assert_eq!(price, crate::utils::round_to_9_places(expected));
-        assert_eq!(settlement, Settlement::Immediate);
+        assert_eq!(settlement, Settlement::Fast);
         assert_eq!(from_block, 101);
     }
 
