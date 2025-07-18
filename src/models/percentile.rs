@@ -59,5 +59,9 @@ pub fn get_prediction_percentile(
         }
     }
 
-    Ok((round_to_9_places(percentile_price), Settlement::Fast, latest_block + 1))
+    Ok((
+        round_to_9_places(percentile_price),
+        Settlement::Fast,
+        latest_block + 1,
+    ))
 }

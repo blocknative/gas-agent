@@ -10,7 +10,10 @@ use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
 use anyhow::{anyhow, Result};
 
-pub fn get_prediction_swma(block_distributions: &[BlockDistribution], latest_block: u64) -> Result<(Prediction, Settlement, FromBlock)> {
+pub fn get_prediction_swma(
+    block_distributions: &[BlockDistribution],
+    latest_block: u64,
+) -> Result<(Prediction, Settlement, FromBlock)> {
     if block_distributions.is_empty() {
         return Err(anyhow!(
             "MovingAverage model requires at least one block distribution"
@@ -57,5 +60,9 @@ pub fn get_prediction_swma(block_distributions: &[BlockDistribution], latest_blo
         ));
     };
 
-    Ok((round_to_9_places(predicted_price), Settlement::Fast, latest_block + 1))
+    Ok((
+        round_to_9_places(predicted_price),
+        Settlement::Fast,
+        latest_block + 1,
+    ))
 }

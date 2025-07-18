@@ -702,10 +702,10 @@ mod tests {
             // Should have entries for both transactions
             assert!(last_dist.len() >= 2);
 
-            // The EIP-1559 transaction should result in 2 gwei (priority fee)
+            // The EIP-1559 transaction should result in 12 gwei (base + priority fee)
             assert!(last_dist
                 .iter()
-                .any(|bucket| (bucket.gwei - 2.0).abs() < 0.001));
+                .any(|bucket| (bucket.gwei - 12.0).abs() < 0.001));
 
             // The legacy transaction should result in 25 gwei
             assert!(last_dist

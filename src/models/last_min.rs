@@ -27,5 +27,9 @@ pub fn get_prediction_last_min(
         .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or(0.0);
 
-    Ok((round_to_9_places(last_min), Settlement::Fast, latest_block + 1))
+    Ok((
+        round_to_9_places(last_min),
+        Settlement::Fast,
+        latest_block + 1,
+    ))
 }
