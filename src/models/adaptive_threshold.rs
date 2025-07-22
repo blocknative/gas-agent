@@ -1,7 +1,6 @@
-use crate::models::{FromBlock, Prediction};
+use crate::models::{FromBlock, ModelError, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
-use anyhow::{anyhow, Result};
 use rust_decimal::{
     prelude::{FromPrimitive, ToPrimitive},
     Decimal,
@@ -17,11 +16,11 @@ How it works: This algorithm finds the minimum gas price included in each recent
 pub fn get_prediction_adaptive_threshold(
     block_distributions: &[BlockDistribution],
     latest_block: u64,
-) -> Result<(Prediction, Settlement, FromBlock)> {
+) -> Result<(Prediction, Settlement, FromBlock), ModelError> {
     // Handle empty input
     if block_distributions.is_empty() {
-        return Err(anyhow!(
-            "AdaptiveThreshold model requires at least one block distribution"
+        return Err(ModelError::insufficient_data(
+            "AdaptiveThreshold model requires at least one block distribution",
         ));
     }
 
@@ -51,8 +50,8 @@ pub fn get_prediction_adaptive_threshold(
     }
 
     if min_included_prices.is_empty() {
-        return Err(anyhow!(
-            "AdaptiveThreshold model requires blocks with transactions"
+        return Err(ModelError::insufficient_data(
+            "AdaptiveThreshold model requires blocks with transactions",
         ));
     }
 

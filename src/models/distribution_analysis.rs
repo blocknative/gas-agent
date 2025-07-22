@@ -5,18 +5,17 @@ This approach analyzes the cumulative distribution function (CDF) of gas prices 
 How it works: This algorithm analyzes how gas prices are distributed in the most recent block, constructing a cumulative distribution function. It then identifies the "sweet spot" where the rate of change in the CDF decreases significantly. This is often where many transactions are being included, representing an efficient gas price.
 */
 
-use crate::models::{FromBlock, Prediction};
+use crate::models::{FromBlock, ModelError, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
-use anyhow::{anyhow, Result};
 
 pub fn get_prediction_distribution(
     block_distributions: &[BlockDistribution],
     latest_block: u64,
-) -> Result<(Prediction, Settlement, FromBlock)> {
+) -> Result<(Prediction, Settlement, FromBlock), ModelError> {
     if block_distributions.is_empty() {
-        return Err(anyhow!(
-            "DistributionAnalysis model requires at least one block distribution"
+        return Err(ModelError::insufficient_data(
+            "DistributionAnalysis model requires at least one block distribution",
         ));
     }
 
@@ -24,8 +23,8 @@ pub fn get_prediction_distribution(
 
     // Focus on most recent block for distribution analysis
     if latest_block_distribution.is_empty() {
-        return Err(anyhow!(
-            "DistributionAnalysis model requires non-empty latest block"
+        return Err(ModelError::insufficient_data(
+            "DistributionAnalysis model requires non-empty latest block",
         ));
     }
 

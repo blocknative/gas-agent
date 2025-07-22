@@ -1,7 +1,6 @@
 use crate::distribution::BlockDistribution;
 use crate::types::{ModelKind, Settlement};
 use adaptive_threshold::get_prediction_adaptive_threshold;
-use anyhow::Result;
 use distribution_analysis::get_prediction_distribution;
 use last_min::get_prediction_last_min;
 use moving_average::get_prediction_swma;
@@ -11,11 +10,14 @@ use time_series::get_prediction_time_series;
 
 mod adaptive_threshold;
 mod distribution_analysis;
+mod errors;
 mod last_min;
 mod moving_average;
 mod pending_floor;
 mod percentile;
 mod time_series;
+
+pub use errors::ModelError;
 
 pub type Prediction = f64;
 pub type FromBlock = u64;
@@ -27,7 +29,7 @@ pub async fn apply_model(
     block_distributions: &[BlockDistribution],
     pending_block_distribution: Option<BlockDistribution>,
     latest_block: u64,
-) -> Result<(Prediction, Settlement, FromBlock)> {
+) -> Result<(Prediction, Settlement, FromBlock), ModelError> {
     match model {
         ModelKind::AdaptiveThreshold => {
             get_prediction_adaptive_threshold(block_distributions, latest_block)

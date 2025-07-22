@@ -1,7 +1,7 @@
 use crate::blocks::{block_to_block_distribution, calc_base_fee};
 use crate::config::{AgentConfig, ChainConfig, Config, PendingBlockDataSource, PredictionTrigger};
 use crate::distribution::BlockDistribution;
-use crate::models::apply_model;
+use crate::models::{apply_model, ModelError};
 use crate::publish::publish_agent_payload;
 use crate::rpc::{get_latest_block, get_rpc_client, Block, BlockHeader, RpcClient};
 use crate::types::{
@@ -83,13 +83,21 @@ impl GasAgent {
                     guard.clone()
                 };
 
-                let (price, settlement, from_block) = apply_model(
+                let (price, settlement, from_block) = match apply_model(
                     model,
                     &block_distributions,
                     pending_block_distribution,
                     latest_block,
                 )
-                .await?;
+                .await
+                {
+                    Ok(result) => result,
+                    Err(ModelError::InsufficientData { message }) => {
+                        debug!("Insufficient data for model prediction: {}", message);
+                        return Ok(());
+                    }
+                    Err(e) => return Err(e.into()),
+                };
 
                 let payload = AgentPayload {
                     from_block,
