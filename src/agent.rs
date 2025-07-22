@@ -570,7 +570,7 @@ mod tests {
                 1000 + i,
                 1700000000 + (i as i64 * 12),
                 vec![create_test_transaction(
-                    &format!("0x{:x}", i),
+                    &format!("0x{i:x}"),
                     Some(20_000_000_000 + (i as u128) * 1_000_000_000),
                     None,
                     None,

@@ -46,7 +46,7 @@ impl std::error::Error for SignerError {}
 impl std::fmt::Display for SignerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SignerError::SigningError(msg) => write!(f, "Signing Error: {}", msg),
+            SignerError::SigningError(msg) => write!(f, "Signing Error: {msg}"),
         }
     }
 }
