@@ -6,7 +6,6 @@ description = "Blocknative Gas Agent - Generate real-time gas price estimates fo
 homepage = "https://gas.network"
 repository = "https://github.com/blocknative/gas-agent"
 
-
 [profile.release]
 opt-level = 3
 codegen-units = 1
@@ -14,6 +13,10 @@ debug = false
 lto = "thin"
 incremental = false
 panic = "abort"
+
+[profile.dist]
+inherits = "release"
+strip = true
 
 [dependencies]
 alloy = { version = "~0.12.0", default-features = false, features = [
