@@ -13,28 +13,27 @@ How it works:
 4. Returns this as the optimal price for immediate settlement
 */
 
-use crate::models::{FromBlock, Prediction};
+use crate::models::{FromBlock, ModelError, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
-use anyhow::{anyhow, Result};
 
 const ONE_WEI_IN_GWEI: f64 = 0.000000001; // 1 wei
 
 pub fn get_prediction_pending_floor(
     pending_block_distribution: Option<BlockDistribution>,
     latest_block: u64,
-) -> Result<(Prediction, Settlement, FromBlock)> {
+) -> Result<(Prediction, Settlement, FromBlock), ModelError> {
     // If no pending block distribution is available, return an error
     let Some(pending_distribution) = pending_block_distribution else {
-        return Err(anyhow!(
-            "PendingFloor model requires pending block distribution data"
+        return Err(ModelError::missing_data(
+            "PendingFloor model requires pending block distribution data",
         ));
     };
 
     // If the pending distribution is empty, return an error
     if pending_distribution.is_empty() {
-        return Err(anyhow!(
-            "PendingFloor model requires non-empty pending block distribution"
+        return Err(ModelError::insufficient_data(
+            "PendingFloor model requires non-empty pending block distribution",
         ));
     }
 

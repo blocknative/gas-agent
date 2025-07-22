@@ -5,20 +5,19 @@ This approach uses simple linear regression to identify trends in gas prices and
 How it works: This algorithm calculates the median gas price for each block, performs linear regression to identify the trend, and extrapolates to predict the next value. It's particularly useful when gas prices show a consistent trend over time (either increasing or decreasing).
 */
 
-use crate::models::{FromBlock, Prediction};
+use crate::models::{FromBlock, ModelError, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
-use anyhow::{anyhow, Result};
 
 use super::moving_average::get_prediction_swma;
 
 pub fn get_prediction_time_series(
     block_distributions: &[BlockDistribution],
     latest_block: u64,
-) -> Result<(Prediction, Settlement, FromBlock)> {
+) -> Result<(Prediction, Settlement, FromBlock), ModelError> {
     if block_distributions.is_empty() {
-        return Err(anyhow!(
-            "TimeSeries model requires at least one block distribution"
+        return Err(ModelError::insufficient_data(
+            "TimeSeries model requires at least one block distribution",
         ));
     }
     // Need more blocks for time series analysis
@@ -63,8 +62,8 @@ pub fn get_prediction_time_series(
     }
 
     if median_prices.is_empty() {
-        return Err(anyhow!(
-            "TimeSeries model requires blocks with transactions"
+        return Err(ModelError::insufficient_data(
+            "TimeSeries model requires blocks with transactions",
         ));
     }
 

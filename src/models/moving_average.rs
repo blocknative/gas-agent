@@ -5,18 +5,17 @@ This approach calculates a weighted average of recent gas prices, giving more we
 How it works: This algorithm calculates the average gas price for each block, weighs them by recency, and produces a weighted average. It's simple and works well when gas prices are relatively stable.
 */
 
-use crate::models::{FromBlock, Prediction};
+use crate::models::{FromBlock, ModelError, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
-use anyhow::{anyhow, Result};
 
 pub fn get_prediction_swma(
     block_distributions: &[BlockDistribution],
     latest_block: u64,
-) -> Result<(Prediction, Settlement, FromBlock)> {
+) -> Result<(Prediction, Settlement, FromBlock), ModelError> {
     if block_distributions.is_empty() {
-        return Err(anyhow!(
-            "MovingAverage model requires at least one block distribution"
+        return Err(ModelError::insufficient_data(
+            "MovingAverage model requires at least one block distribution",
         ));
     }
     // Use up to 10 most recent blocks
@@ -47,16 +46,16 @@ pub fn get_prediction_swma(
     }
 
     if !has_transactions {
-        return Err(anyhow!(
-            "MovingAverage model requires blocks with transactions"
+        return Err(ModelError::insufficient_data(
+            "MovingAverage model requires blocks with transactions",
         ));
     }
 
     let predicted_price = if weight_sum > 0.0 {
         weighted_sum / weight_sum
     } else {
-        return Err(anyhow!(
-            "MovingAverage model requires blocks with transactions"
+        return Err(ModelError::insufficient_data(
+            "MovingAverage model requires blocks with transactions",
         ));
     };
 

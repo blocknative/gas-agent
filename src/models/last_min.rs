@@ -2,22 +2,21 @@
 Simply takes the minimum of the last block.
 */
 
-use crate::models::{FromBlock, Prediction};
+use crate::models::{FromBlock, ModelError, Prediction};
 use crate::types::Settlement;
 use crate::{distribution::BlockDistribution, utils::round_to_9_places};
-use anyhow::{anyhow, Result};
 
 pub fn get_prediction_last_min(
     block_distributions: &[BlockDistribution],
     latest_block: u64,
-) -> Result<(Prediction, Settlement, FromBlock)> {
-    let last_block_distribution = block_distributions
-        .last()
-        .ok_or_else(|| anyhow!("LastMin model requires at least one block distribution"))?;
+) -> Result<(Prediction, Settlement, FromBlock), ModelError> {
+    let last_block_distribution = block_distributions.last().ok_or_else(|| {
+        ModelError::insufficient_data("LastMin model requires at least one block distribution")
+    })?;
 
     if last_block_distribution.is_empty() {
-        return Err(anyhow!(
-            "LastMin model requires non-empty block distribution"
+        return Err(ModelError::insufficient_data(
+            "LastMin model requires non-empty block distribution",
         ));
     }
 
