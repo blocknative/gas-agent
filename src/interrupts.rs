@@ -1,5 +1,6 @@
 use ntex::rt::spawn;
 use std::{future::Future, panic};
+#[cfg(unix)]
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
 
@@ -15,6 +16,7 @@ where
     }));
 }
 
+#[cfg(unix)]
 pub fn on_sigterm<F, Fut>(func: F) -> ntex::rt::JoinHandle<()>
 where
     F: Fn() -> Fut + Send + 'static,
@@ -35,6 +37,24 @@ where
             }
         }
 
+        func().await;
+
+        std::process::exit(0);
+    });
+
+    shutdown_handler
+}
+
+#[cfg(windows)]
+pub fn on_sigterm<F, Fut>(func: F) -> ntex::rt::JoinHandle<()>
+where
+    F: Fn() -> Fut + Send + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
+{
+    let shutdown_handler = spawn(async move {
+        tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl+c");
+        info!("Received Ctrl+C signal");
+        
         func().await;
 
         std::process::exit(0);
