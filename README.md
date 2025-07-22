@@ -26,42 +26,48 @@ rustc --version
 cargo --version
 ```
 
+## Installation
+
+### Pre-built Binaries (Recommended)
+
+Download the latest release for your platform:
+
+```bash
+# Install using our shell installer (macOS/Linux)
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/blocknative/gas-agent/releases/latest/download/gas-agent-installer.sh | sh
+
+# Or install via Homebrew (macOS/Linux)
+brew install blocknative/tap/gas-agent
+
+# Or download manually from GitHub releases
+# Visit: https://github.com/blocknative/gas-agent/releases
+```
+
+### From Source
+
+If you prefer to build from source or need the latest unreleased changes:
+
+```bash
+# Install via cargo (requires Rust toolchain)
+cargo install --git https://github.com/blocknative/gas-agent
+
+# Or clone and build
+git clone https://github.com/blocknative/gas-agent
+cd gas-agent
+cargo build --release
+```
+
 ## Quick Start
 
-1. **Clone the repository**
+1. **Generate signing keys**
+
+   All agent payloads are signed before submission to the Gas Network so that they are verifiable and attributable. Use the private key for the `signer_key` field for each agent.
 
    ```bash
-   git clone https://github.com/blocknative/gas-agent
-   cd gas-agent
+   gas-agent generate-keys
    ```
 
-2. **Set up environment variables**
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   Edit `.env` with your configuration. See [Configuration Options](#configuration-options)
-
-3. **Generate signing keys**
-
-   All agent payloads are signed before submission to the Gas Network so that they are verifiable and attributable. Predictions will be evaluated by the combination of the `System`, `Network`, `Settlement` and `from_block` of the payload. It is recommended that you use a unique key pair for each `AgentKind`, otherwise the predictions for the same combination will be averaged and evaluated together, rather then evaluated separately. Use the private key for the `signer_key` field for each agent.
-
-   There is a helper CLI command if you would like to generate some fresh random keys:
-
-   ```bash
-   cargo run -- generate-keys
-   ```
-
-   This will output a new key pair. Save the private key securely for agent configuration.
-
-4. **Build the project**
-
-   ```bash
-   cargo build --release
-   ```
-
-5. **Configure chains and agents**
+2. **Configure chains and agents**
 
    A list of chains and the agents to run for each chain can be configured and will run in parallel with each chain running on it's own thread. Set the `CHAINS` env variable with a JSON string:
 
@@ -82,9 +88,9 @@ cargo --version
    ]
    ```
 
-6. **Run the agent**
+3. **Run the agent**
    ```bash
-   cargo run -- start
+   gas-agent start
    ```
 
 ## Agent Registration
@@ -104,7 +110,7 @@ To register your agent and get your signing addresses whitelisted:
 1. **Generate Your Keys**: Use the built-in key generation tool to create your signing keys:
 
    ```bash
-   cargo run -- generate-keys
+   gas-agent generate-keys
    ```
 
 2. **Save Your Keys**: Securely store the private key for your agent configuration and note the corresponding public address
@@ -138,6 +144,28 @@ Once whitelisted, your agent can begin submitting predictions that will be evalu
 
 ## Development
 
+### Prerequisites for Development
+
+Before starting development, ensure you have:
+
+1. **Rust toolchain** (see Installation section above)
+2. **Git** for version control
+3. **A code editor** with Rust support (VS Code with rust-analyzer recommended)
+
+### Setting Up the Development Environment
+
+```bash
+# Clone the repository
+git clone https://github.com/blocknative/gas-agent
+cd gas-agent
+
+# Verify everything builds and tests pass
+cargo check
+cargo test
+cargo clippy --workspace --all-targets --all-features
+cargo fmt --check
+```
+
 ### Running in Development Mode
 
 ```bash
@@ -146,6 +174,76 @@ RUST_LOG=debug cargo run -- start --chains 'YOUR-CONFIG-JSON'
 
 # Run tests
 cargo test
+
+# Run specific tests
+cargo test test_name
+
+# Run with release optimizations (for performance testing)
+cargo run --release -- start --chains 'YOUR-CONFIG-JSON'
+```
+
+### Development Workflow
+
+1. **Create a feature branch**:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Make your changes** and ensure code quality:
+   ```bash
+   # Check for compilation errors
+   cargo check
+   
+   # Run tests
+   cargo test
+   
+   # Fix linting issues
+   cargo clippy --workspace --all-targets --all-features --fix
+   
+   # Format code
+   cargo fmt
+   ```
+
+3. **Commit your changes**:
+   ```bash
+   git add .
+   git commit -m "Add your feature description"
+   ```
+
+4. **Push and create a pull request**:
+   ```bash
+   git push -u origin feature/your-feature-name
+   # Then create a PR on GitHub
+   ```
+
+### Code Quality Standards
+
+The project enforces strict code quality standards:
+
+- **No warnings**: All code must compile without warnings
+- **Formatted code**: Use `cargo fmt` to format code consistently
+- **Linted code**: Use `cargo clippy` to catch common mistakes and improve code quality
+- **Tested code**: Add tests for new functionality
+- **Documentation**: Document public APIs and complex logic
+
+### Testing
+
+```bash
+# Run all tests
+cargo test
+
+# Run tests with output
+cargo test -- --nocapture
+
+# Run tests for a specific module
+cargo test models::
+
+# Run integration tests only
+cargo test --test '*'
+
+# Generate test coverage report (requires cargo-tarpaulin)
+cargo install cargo-tarpaulin
+cargo tarpaulin --out Html
 ```
 
 ### Configuration Options
@@ -450,7 +548,7 @@ cargo build
 cargo test
 
 # Test your model
-cargo run -- start --chains '[{
+gas-agent start --chains '[{
   "system": "ethereum",
   "network": "mainnet",
   "json_rpc_url": "https://ethereum-rpc.publicnode.com",
@@ -555,6 +653,109 @@ cargo build --release
 # The binary will be available at
 ./target/release/gas-agent
 ```
+
+## Release Process
+
+### Creating a New Release
+
+Releases are automated using [cargo-dist](https://github.com/axodotdev/cargo-dist) and triggered by pushing git tags. Follow these steps:
+
+#### 1. Update Version
+
+Update the version in `Cargo.toml`:
+
+```toml
+[package]
+version = "0.1.0"  # Update this
+```
+
+#### 2. Update Changelog
+
+Update `CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/) format:
+
+```markdown
+## [0.1.0] - 2025-01-22
+
+### Added
+- New feature descriptions
+- New model implementations
+
+### Changed
+- Breaking changes or significant modifications
+- Performance improvements
+
+### Fixed
+- Bug fixes and error handling improvements
+
+### Removed
+- Deprecated features that were removed
+```
+
+**Important**: The GitHub release title and body are automatically generated from the changelog, so ensure your changelog entries are clear and well-formatted.
+
+#### 3. Create and Push Tag
+
+```bash
+# Commit version and changelog changes first
+git add Cargo.toml CHANGELOG.md
+git commit -m "Prepare release v0.1.0"
+
+# Create and push the tag
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+#### 4. Automated Release Process
+
+When you push the tag, GitHub Actions will automatically:
+
+1. **Build artifacts** for multiple platforms (Linux, macOS, Windows)
+2. **Run tests** to ensure code quality
+3. **Generate release notes** from your changelog
+4. **Create GitHub release** with:
+   - Auto-generated title from changelog
+   - Auto-generated body from changelog
+   - Platform-specific binaries and installers
+   - Checksums for verification
+
+#### 5. Verify Release
+
+After the workflow completes:
+
+1. Check the [GitHub releases page](https://github.com/blocknative/gas-agent/releases)
+2. Verify all platform binaries are present
+3. Test the installer scripts work correctly
+4. Update documentation if needed
+
+### Release Checklist
+
+Before creating a release:
+
+- [ ] All tests pass: `cargo test`
+- [ ] Code is properly formatted: `cargo fmt --check`
+- [ ] No clippy warnings: `cargo clippy --workspace --all-targets --all-features`
+- [ ] Version updated in `Cargo.toml`
+- [ ] `CHANGELOG.md` updated with new version and changes
+- [ ] All changes committed to main branch
+- [ ] Git tag created and pushed
+
+### Hotfix Releases
+
+For urgent fixes:
+
+1. Create a hotfix branch from the release tag
+2. Apply minimal fix
+3. Update patch version (e.g., `0.1.0` → `0.1.1`)
+4. Update changelog with hotfix entry
+5. Create new tag and push
+
+### Pre-releases
+
+For beta or release candidate versions:
+
+1. Use pre-release version format: `v0.1.0-beta.1`
+2. GitHub release will automatically be marked as pre-release
+3. Follow same process as regular releases
 
 ## Docker Support
 
