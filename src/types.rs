@@ -42,7 +42,7 @@ impl fmt::Display for AgentKind {
         match self {
             AgentKind::Node => write!(f, "node"),
             AgentKind::Target => write!(f, "target"),
-            AgentKind::Model(kind) => write!(f, "{}", kind),
+            AgentKind::Model(kind) => write!(f, "{kind}"),
         }
     }
 }
@@ -60,14 +60,14 @@ impl FromStr for AgentKind {
         match s.to_lowercase().as_str() {
             "node" => Ok(AgentKind::Node),
             "target" => Ok(AgentKind::Target),
-            _ => Err(format!("Unknown mode: {}", s)),
+            _ => Err(format!("Unknown mode: {s}")),
         }
     }
 }
 
 impl From<String> for AgentKind {
     fn from(s: String) -> Self {
-        AgentKind::from_str(&s).unwrap_or_else(|_| panic!("Invalid AgentKind: {}", s))
+        AgentKind::from_str(&s).unwrap_or_else(|_| panic!("Invalid AgentKind: {s}"))
     }
 }
 
@@ -130,7 +130,7 @@ impl AgentPayload {
         let signature = signer.sign_message(&message).await?;
         let hex_signature = hex::encode(signature.as_bytes());
 
-        Ok(format!("0x{}", hex_signature))
+        Ok(format!("0x{hex_signature}"))
     }
 
     pub fn network_signature(self, signer_key: &str) -> Result<String> {
@@ -145,7 +145,7 @@ impl AgentPayload {
 
         let hex_signature = hex::encode(opv2.signature.unwrap().as_bytes());
 
-        Ok(format!("0x{}", hex_signature))
+        Ok(format!("0x{hex_signature}"))
     }
 }
 
