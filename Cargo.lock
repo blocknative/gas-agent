@@ -1525,7 +1525,7 @@ dependencies = [
 
 [[package]]
 name = "gas-agent"
-version = "0.0.10"
+version = "0.0.9"
 dependencies = [
  "alloy",
  "anyhow",

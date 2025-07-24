@@ -107,21 +107,21 @@ pub struct AgentPayload {
 
 impl AgentPayload {
     /// Hashes (keccak256) the payload and returns as bytes
-    /// Uses canonical JSON representation for consistent hashing
     pub fn hash(&self) -> Vec<u8> {
         let json = json!({
-            "from_block": self.from_block,
-            "kind": self.kind,
-            "network": self.network,
-            "price": format!("{:.9}", self.price),
-            "settlement": self.settlement,
+            "timestamp": self.timestamp,
             "system": self.system,
-            "timestamp": self.timestamp.timestamp_millis(),
+            "network": self.network,
+            "settlement": self.settlement,
+            "from_block": self.from_block,
+            "price": self.price,
             "unit": self.unit,
+            "kind": self.kind,
         });
 
         let bytes = json.to_string().as_bytes().to_vec();
-        keccak256(&bytes).to_vec()
+        let message_hash = keccak256(&bytes).to_string();
+        message_hash.as_bytes().to_vec()
     }
 
     pub async fn sign(&self, signer_key: &str) -> Result<String> {
