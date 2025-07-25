@@ -26,23 +26,13 @@ Each utility function output is bounded from [0,1]. The sum of all weights equal
 
 |  | weight | utility function | raw input (with example) |
 | --- | --- | --- | --- |
-| inclusion mean | $w_0=0.5$ | $u_0()$
+| inclusion mean | $w_0=0.5$ | $u_0()$ | $x_0=0.9$  |
+| stability for inclusion | $w_1 = 0.15$ | $u_1() = e^{-\beta_1*x}$ $\beta_1=3.2$ | $x_1 = 2.5$ |
+| overpayment mean | $w_2=0.15$ | $u_2()=e^{-\beta_2*x}$ $\beta_2=3.2$ | $x_2 = 1.2$ |
+| stability for overpayment | $w_3=0.10$ | $u_3()=e^{-\beta_3*x}$ $\beta_3=3.2$ | $x_3=3.2$ |
+| liveliness | $w_4=0.10$ | $u_4()$ | $x_4=0.9$  |
 
-Redundant, as the inclusion mean is already constrained to the interval [0, 1]. | $x_0=0.9$  |
-| stability for inclusion | $w_1 = 0.15$ | $u_1() = e^{-\beta_1*x}$
-
-
-
-$\beta_1=3.2$ | $x_1 = 2.5$ |
-| overpayment mean | $w_2=0.15$ | $u_2()=e^{-\beta_2*x}$
-
-$\beta_2=3.2$ | $x_2 = 1.2$ |
-| stability for overpayment | $w_3=0.10$ | $u_3()=e^{-\beta_3*x}$
-
-$\beta_3=3.2$ | $x_3=3.2$ |
-| liveliness | $w_4=0.10$ | $u_4()$
-
-Redundant, as the liveliness score is already constrained to the interval [0, 1].  | $x_4=0.9$  |
+Note that the utility functions $u_0()$ and $u_4()$ are redundant, as the inclusion mean is already constrained to the interval [0, 1].
 
 # Score Calculation Breakdown
 
@@ -87,7 +77,7 @@ $u = exp(- \beta * x)$ where $\beta=3.2$
 We selected  $\beta$  based on the following constraints.
 
 $$
-\begin{cases}u=1 \hspace{0.2em}\text{when}\hspace{0.2em}x=0\hspace{3.6em}(1)\\u=0.2\hspace{0.2em}\text{when}\hspace{0.2em}x=0.5\hspace{2em}(2)\\\end{cases}
+\begin{cases}u=1 \hspace{0.2em}\text{when}\hspace{0.2em}x=0\hspace{3.6em}(1)\\u=0.2\hspace{0.2em}\text{when}\hspace{0.2em}x=0.5\hspace{2em}(2)\end{cases}
 $$
 
 $u$ represents the utility produced by the given metric.
