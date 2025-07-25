@@ -644,7 +644,7 @@ When you submit a gas price prediction, the Gas Network evaluates its accuracy w
    - **Inclusion Rate**: Did your prediction price get onchain within the block window
    - **Cost Efficiency**: Percentage overpayment
 
-For details on the *Evaluation Function* used to score your predictions, see the [Evaluation Function](#evaluation-function).
+For details on the *Evaluation Function* used to score your predictions, see the [Evaluation Function](EVALUATION.md).
 
 ## Building for Production
 
