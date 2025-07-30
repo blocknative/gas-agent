@@ -125,6 +125,11 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: "false"
+          cache-on-failure: "true"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest
