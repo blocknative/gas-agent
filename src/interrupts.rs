@@ -52,9 +52,11 @@ where
     Fut: Future<Output = ()> + Send + 'static,
 {
     let shutdown_handler = spawn(async move {
-        tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl+c");
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for ctrl+c");
         info!("Received Ctrl+C signal");
-        
+
         func().await;
 
         std::process::exit(0);
