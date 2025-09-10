@@ -1,16 +1,16 @@
+use crate::chain::{sign::PayloadSigner, types::SignedOraclePayloadV2};
 use alloy::{
     hex,
-    primitives::keccak256,
-    signers::{local::PrivateKeySigner, Signer},
+    primitives::{keccak256, Address, B256, U256},
+    signers::{local::PrivateKeySigner, SignerSync},
 };
-use anyhow::Result;
+#[cfg(test)]
+use alloy::signers::Signature;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::{fmt, str::FromStr};
 use strum_macros::{Display, EnumString};
-
-use crate::chain::{sign::PayloadSigner, types::SignedOraclePayloadV2};
 
 #[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
 #[strum(serialize_all = "snake_case")]
@@ -71,65 +71,131 @@ impl From<String> for AgentKind {
     }
 }
 
-#[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
-#[strum(serialize_all = "UPPERCASE")]
-#[serde(rename_all = "UPPERCASE")]
-pub enum FeeUnit {
-    Gwei,
-}
-
-#[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
-#[strum(serialize_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
-pub enum AgentPayloadKind {
-    Estimate,
-    Target,
-}
-
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AgentPayload {
+    /// Schema/version for signed payloads (EIP-712 domain version)
+    #[serde(default = "AgentPayload::schema_version")]
+    pub schema_version: String,
     /// The block height this payload is valid from
     pub from_block: u64,
     /// How fast the settlement time is for this payload
     pub settlement: Settlement,
-    /// The exact time the prediction is captured UTC.
+    /// The exact time the estimate is captured UTC.
     pub timestamp: DateTime<Utc>,
-    /// The unit the fee is denominated in (e.g. gwei, sats)
-    pub unit: FeeUnit,
     /// The name of the chain the estimations are for (eg. ethereum, bitcoin, base)
     pub system: System,
     /// mainnet, etc.
     pub network: Network,
-    /// The estimated price
-    pub price: f64,
-    pub kind: AgentPayloadKind,
+    /// The estimated price in wei (always denominated in wei)
+    pub price: U256,
 }
 
 impl AgentPayload {
-    /// Hashes (keccak256) the payload and returns as bytes
-    pub fn hash(&self) -> Vec<u8> {
-        let json = json!({
-            "timestamp": self.timestamp,
-            "system": self.system,
-            "network": self.network,
-            "settlement": self.settlement,
-            "from_block": self.from_block,
-            "price": self.price,
-            "unit": self.unit,
-            "kind": self.kind,
-        });
-
-        let bytes = json.to_string().as_bytes().to_vec();
-        let message_hash = keccak256(&bytes).to_string();
-        message_hash.as_bytes().to_vec()
+    fn schema_version() -> String {
+        "1".to_string()
     }
 
-    pub async fn sign(&self, signer_key: &str) -> Result<String> {
-        let message = self.hash();
-        let signer: PrivateKeySigner = signer_key.parse()?;
-        let signature = signer.sign_message(&message).await?;
-        let hex_signature = hex::encode(signature.as_bytes());
+    // --- EIP-712 helpers ---
+    fn typehash_domain() -> B256 {
+        // keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
+        keccak256(
+            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                .as_bytes(),
+        )
+    }
 
+    fn typehash_agent_payload() -> B256 {
+        // keccak256("AgentPayload(string schema_version,uint256 timestamp,string system,string network,string settlement,uint256 from_block,uint256 price)")
+        keccak256(
+            "AgentPayload(string schema_version,uint256 timestamp,string system,string network,string settlement,uint256 from_block,uint256 price)"
+                .as_bytes(),
+        )
+    }
+
+    fn keccak_string(val: &str) -> B256 {
+        keccak256(val.as_bytes())
+    }
+
+    fn encode_u256_bytes_be(x: impl Into<u128>) -> [u8; 32] {
+        let v: u128 = x.into();
+        let mut out = [0u8; 32];
+        out[16..].copy_from_slice(&v.to_be_bytes());
+        out
+    }
+
+    fn encode_u256_u64(x: u64) -> [u8; 32] {
+        Self::encode_u256_bytes_be(x as u128)
+    }
+
+    fn encode_address(addr: Address) -> [u8; 32] {
+        let mut out = [0u8; 32];
+        out[12..].copy_from_slice(addr.as_slice());
+        out
+    }
+
+    fn domain_separator(&self, chain_id: u64) -> B256 {
+        let typehash = Self::typehash_domain();
+        let name_hash = Self::keccak_string("Gas Network AgentPayload");
+        let version_hash = Self::keccak_string(&self.schema_version);
+        let chain_id_enc = Self::encode_u256_u64(chain_id);
+        let verifying = Self::encode_address(Address::ZERO);
+
+        let mut enc = Vec::with_capacity(32 * 5);
+        enc.extend_from_slice(typehash.as_slice());
+        enc.extend_from_slice(name_hash.as_slice());
+        enc.extend_from_slice(version_hash.as_slice());
+        enc.extend_from_slice(&chain_id_enc);
+        enc.extend_from_slice(&verifying);
+        keccak256(&enc)
+    }
+
+    fn struct_hash(&self) -> B256 {
+        let typehash = Self::typehash_agent_payload();
+
+        // timestamp in ns since epoch
+        let secs = self.timestamp.timestamp() as i128;
+        let nanos = self.timestamp.timestamp_subsec_nanos() as i128;
+        let ts_ns: i128 = secs * 1_000_000_000 + nanos;
+        let ts_ns_u: u128 = ts_ns as u128;
+
+        // lowercase strings
+        let system = self.system.to_string().to_lowercase();
+        let network = self.network.to_string().to_lowercase();
+        let settlement = self.settlement.to_string().to_lowercase();
+
+        // price from field
+        let price_bytes = self.price.to_be_bytes::<32>();
+
+        let mut enc = Vec::with_capacity(32 * 8);
+        enc.extend_from_slice(typehash.as_slice());
+        enc.extend_from_slice(Self::keccak_string(&self.schema_version).as_slice());
+        enc.extend_from_slice(&Self::encode_u256_bytes_be(ts_ns_u));
+        enc.extend_from_slice(Self::keccak_string(&system).as_slice());
+        enc.extend_from_slice(Self::keccak_string(&network).as_slice());
+        enc.extend_from_slice(Self::keccak_string(&settlement).as_slice());
+        enc.extend_from_slice(&Self::encode_u256_u64(self.from_block));
+        enc.extend_from_slice(&price_bytes);
+        keccak256(&enc)
+    }
+
+    fn eip712_digest(&self, chain_id: u64) -> B256 {
+        let domain_sep = self.domain_separator(chain_id);
+        let struct_hash = self.struct_hash();
+        let mut buf = Vec::with_capacity(2 + 32 + 32);
+        buf.extend_from_slice(&[0x19, 0x01]);
+        buf.extend_from_slice(domain_sep.as_slice());
+        buf.extend_from_slice(struct_hash.as_slice());
+        keccak256(&buf)
+    }
+
+    /// EIP-712 signing over the AgentPayload typed data.
+    pub fn sign(&self, signer_key: &str) -> Result<String> {
+        let signer: PrivateKeySigner = signer_key.parse()?;
+        let chain_id =
+            SystemNetworkKey::new(self.system.clone(), self.network.clone()).to_chain_id();
+        let digest = self.eip712_digest(chain_id);
+        let signature = signer.sign_hash_sync(&digest)?;
+        let hex_signature = hex::encode(signature.as_bytes());
         Ok(format!("0x{hex_signature}"))
     }
 
@@ -143,10 +209,29 @@ impl AgentPayload {
         let signer: PrivateKeySigner = signer_key.parse()?;
         opv2.to_signed_payload(&mut buf, signer)?;
 
-        let hex_signature = hex::encode(opv2.signature.unwrap().as_bytes());
+        let hex_signature = hex::encode(
+            opv2.signature
+                .as_ref()
+                .context("signature should be set after signing")?
+                .as_bytes(),
+        );
 
         Ok(format!("0x{hex_signature}"))
     }
+
+    /// Validates an EIP-712 signature against the payload and returns recovered signer address. Used for round trip test.
+    #[cfg(test)]
+    pub fn validate_signature(&self, signature: &str) -> Result<Address> {
+        let sig_bytes = signature.strip_prefix("0x").unwrap_or(signature);
+        let sig_bytes = hex::decode(sig_bytes)?;
+        let signature = Signature::from_raw(&sig_bytes)?;
+        let chain_id =
+            SystemNetworkKey::new(self.system.clone(), self.network.clone()).to_chain_id();
+        let digest = self.eip712_digest(chain_id);
+        let recovered = signature.recover_address_from_prehash(&digest)?;
+        Ok(recovered)
+    }
+
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
@@ -163,6 +248,40 @@ pub enum System {
 #[serde(rename_all = "lowercase")]
 pub enum Network {
     Mainnet,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::signers::local::PrivateKeySigner;
+    use chrono::{DateTime, Utc};
+
+    #[test]
+    fn test_eip712_sign_and_recover_roundtrip() {
+        let timestamp = DateTime::parse_from_rfc3339("2024-01-01T12:00:00.500000000Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        // Fixed private key for reproducibility (DO NOT USE IN PROD)
+        let sk_hex = "0x59c6995e998f97a5a0044976f3ac3b8c9f27a7d9b3bcd2b0d7aeb5f3e9eae7c6";
+        let signer: PrivateKeySigner = sk_hex.parse().unwrap();
+        let payload = AgentPayload {
+            schema_version: "1".to_string(),
+            from_block: 12345,
+            settlement: Settlement::Fast,
+            timestamp,
+            system: System::Ethereum,
+            network: Network::Mainnet,
+            price: U256::from(20_000_000_000u128), // 20 gwei in wei
+        };
+
+        // Sign
+        let sig = payload.sign(sk_hex).unwrap();
+        assert!(sig.starts_with("0x"));
+
+        // Recover and ensure matches the signer address
+        let recovered = payload.validate_signature(&sig).unwrap();
+        assert_eq!(recovered, signer.address());
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -211,25 +330,6 @@ impl SystemNetworkKey {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct SystemNetworkSettlementKey {
-    pub system: System,
-    pub network: Network,
-    pub settlement: Settlement,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct BlockWindow {
-    pub start: u64,
-    pub end: u64,
-}
-
-impl fmt::Display for BlockWindow {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}-{}", self.start, self.end)
-    }
-}
-
 #[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
@@ -243,22 +343,4 @@ pub enum Settlement {
     Medium,
     /// 1 hour
     Slow,
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize)]
-pub struct AgentKey {
-    pub settlement: Settlement,
-    pub agent_id: String,
-    pub system: System,
-    pub network: Network,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct AgentScore {
-    pub agent_id: String,
-    pub inclusion_cov: Option<f64>,
-    pub overpayment_cov: Option<f64>,
-    pub total_score: Option<f64>,
-    pub inclusion_rate: f64,
-    pub avg_overpayment: Option<f64>,
 }

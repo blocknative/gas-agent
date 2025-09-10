@@ -56,7 +56,13 @@ impl From<AgentPayload> for OraclePayloadV2 {
             },
             records: vec![OraclePayloadRecordV2 {
                 typ: 340, // Hardcoded into type 340 - Max Priority Fee Per Gas 99th.
-                value: U240::from(payload.price),
+                value: {
+                    // Convert uint256 price to uint240 by truncating high 16 bits (should be zero for realistic prices)
+                    let bytes32 = payload.price.to_be_bytes::<32>();
+                    let mut arr30 = [0u8; 30];
+                    arr30.copy_from_slice(&bytes32[2..]);
+                    U240::from_be_bytes::<30>(arr30)
+                },
             }],
         }
     }

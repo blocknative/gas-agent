@@ -43,7 +43,10 @@ version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b4ae82946772d69f868b9ef81fc66acb1b149ef9b4601849bec4bcf5da6552e"
 dependencies = [
+ "alloy-consensus",
  "alloy-core",
+ "alloy-eips",
+ "alloy-serde",
  "alloy-signer",
  "alloy-signer-local",
 ]

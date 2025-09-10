@@ -21,6 +21,7 @@ strip = true
 [dependencies]
 alloy = { version = "~0.12.0", default-features = false, features = [
     "signer-local",
+    "serde",
 ] }
 
 tokio = { version = "~1.44.0", features = ["full"] }
