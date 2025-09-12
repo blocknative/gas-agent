@@ -4,8 +4,7 @@ use crate::distribution::BlockDistribution;
 use crate::models::{apply_model, ModelError};
 use crate::publish::publish_agent_payload;
 use crate::rpc::{get_latest_block, get_rpc_client, Block, BlockHeader, RpcClient};
-use crate::types::{AgentKind, AgentPayload, Settlement, SystemNetworkKey};
-use alloy::primitives::U256;
+use crate::types::{AgentKind, AgentPayload, PriceUnit, Settlement, SystemNetworkKey};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use reqwest::Url;
@@ -106,7 +105,8 @@ impl GasAgent {
                     timestamp: Utc::now(),
                     system: self.chain_config.system.clone(),
                     network: self.chain_config.network.clone(),
-                    price: U256::from(price_wei),
+                    unit: PriceUnit::Wei,
+                    price: price_wei.to_string(),
                 };
 
                 publish_agent_payload(
@@ -138,7 +138,8 @@ impl GasAgent {
                         timestamp: Utc::now(),
                         system: self.chain_config.system.clone(),
                         network: self.chain_config.network.clone(),
-                        price: U256::from(price_wei),
+                        unit: PriceUnit::Wei,
+                        price: price_wei.to_string(),
                     };
 
                     publish_agent_payload(
@@ -160,7 +161,8 @@ impl GasAgent {
                     timestamp: Utc::now(),
                     system: self.chain_config.system.clone(),
                     network: self.chain_config.network.clone(),
-                    price: U256::from(price_wei),
+                    unit: PriceUnit::Wei,
+                    price: price_wei.to_string(),
                 };
 
                 publish_agent_payload(

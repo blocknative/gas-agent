@@ -1,11 +1,11 @@
 use crate::chain::{sign::PayloadSigner, types::SignedOraclePayloadV2};
-use alloy::{
-    hex,
-    primitives::{keccak256, Address, B256, U256},
-    signers::{local::PrivateKeySigner, SignerSync},
-};
 #[cfg(test)]
 use alloy::signers::Signature;
+use alloy::{
+    hex,
+    primitives::{keccak256, B256},
+    signers::{local::PrivateKeySigner, SignerSync},
+};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -73,7 +73,7 @@ impl From<String> for AgentKind {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AgentPayload {
-    /// Schema/version for signed payloads (EIP-712 domain version)
+    /// Schema version string for signed payloads
     #[serde(default = "AgentPayload::schema_version")]
     pub schema_version: String,
     /// The block height this payload is valid from
@@ -82,12 +82,16 @@ pub struct AgentPayload {
     pub settlement: Settlement,
     /// The exact time the estimate is captured UTC.
     pub timestamp: DateTime<Utc>,
-    /// The name of the chain the estimations are for (eg. ethereum, bitcoin, base)
+    /// The name of the chain the estimations are for (eg. ethereum, base)
     pub system: System,
     /// mainnet, etc.
     pub network: Network,
-    /// The estimated price in wei (always denominated in wei)
-    pub price: U256,
+    /// The unit of the `price` field (currently only wei)
+    #[serde(default = "PriceUnit::default_wei")]
+    pub unit: PriceUnit,
+    /// The estimated price as a decimal string. Interpretation depends on `unit`.
+    /// For `wei`, this MUST be an integer decimal string with no leading zeros (except "0").
+    pub price: String,
 }
 
 impl AgentPayload {
@@ -95,105 +99,41 @@ impl AgentPayload {
         "1".to_string()
     }
 
-    // --- EIP-712 helpers ---
-    fn typehash_domain() -> B256 {
-        // keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
-        keccak256(
-            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
-                .as_bytes(),
-        )
-    }
-
-    fn typehash_agent_payload() -> B256 {
-        // keccak256("AgentPayload(string schema_version,uint256 timestamp,string system,string network,string settlement,uint256 from_block,uint256 price)")
-        keccak256(
-            "AgentPayload(string schema_version,uint256 timestamp,string system,string network,string settlement,uint256 from_block,uint256 price)"
-                .as_bytes(),
-        )
-    }
-
-    fn keccak_string(val: &str) -> B256 {
-        keccak256(val.as_bytes())
-    }
-
-    fn encode_u256_bytes_be(x: impl Into<u128>) -> [u8; 32] {
-        let v: u128 = x.into();
-        let mut out = [0u8; 32];
-        out[16..].copy_from_slice(&v.to_be_bytes());
-        out
-    }
-
-    fn encode_u256_u64(x: u64) -> [u8; 32] {
-        Self::encode_u256_bytes_be(x as u128)
-    }
-
-    fn encode_address(addr: Address) -> [u8; 32] {
-        let mut out = [0u8; 32];
-        out[12..].copy_from_slice(addr.as_slice());
-        out
-    }
-
-    fn domain_separator(&self, chain_id: u64) -> B256 {
-        let typehash = Self::typehash_domain();
-        let name_hash = Self::keccak_string("Gas Network AgentPayload");
-        let version_hash = Self::keccak_string(&self.schema_version);
-        let chain_id_enc = Self::encode_u256_u64(chain_id);
-        let verifying = Self::encode_address(Address::ZERO);
-
-        let mut enc = Vec::with_capacity(32 * 5);
-        enc.extend_from_slice(typehash.as_slice());
-        enc.extend_from_slice(name_hash.as_slice());
-        enc.extend_from_slice(version_hash.as_slice());
-        enc.extend_from_slice(&chain_id_enc);
-        enc.extend_from_slice(&verifying);
-        keccak256(&enc)
-    }
-
-    fn struct_hash(&self) -> B256 {
-        let typehash = Self::typehash_agent_payload();
-
-        // timestamp in ns since epoch
+    // --- Canonical JSON signing helpers ---
+    fn timestamp_ns_string(&self) -> String {
         let secs = self.timestamp.timestamp() as i128;
         let nanos = self.timestamp.timestamp_subsec_nanos() as i128;
         let ts_ns: i128 = secs * 1_000_000_000 + nanos;
-        let ts_ns_u: u128 = ts_ns as u128;
+        assert!(ts_ns >= 0, "negative timestamps are not supported");
+        ts_ns.to_string()
+    }
 
-        // lowercase strings
+    /// Build minified canonical JSON with lexicographically sorted keys including exactly the AgentPayload fields.
+    pub fn canonical_json_string(&self) -> String {
+        let schema_version = self.schema_version.clone();
+        let from_block = self.from_block.to_string();
+        let settlement = self.settlement.to_string().to_lowercase();
+        let timestamp = self.timestamp_ns_string();
         let system = self.system.to_string().to_lowercase();
         let network = self.network.to_string().to_lowercase();
-        let settlement = self.settlement.to_string().to_lowercase();
+        let price = self.price.clone();
+        let unit = self.unit.to_string().to_lowercase();
 
-        // price from field
-        let price_bytes = self.price.to_be_bytes::<32>();
-
-        let mut enc = Vec::with_capacity(32 * 8);
-        enc.extend_from_slice(typehash.as_slice());
-        enc.extend_from_slice(Self::keccak_string(&self.schema_version).as_slice());
-        enc.extend_from_slice(&Self::encode_u256_bytes_be(ts_ns_u));
-        enc.extend_from_slice(Self::keccak_string(&system).as_slice());
-        enc.extend_from_slice(Self::keccak_string(&network).as_slice());
-        enc.extend_from_slice(Self::keccak_string(&settlement).as_slice());
-        enc.extend_from_slice(&Self::encode_u256_u64(self.from_block));
-        enc.extend_from_slice(&price_bytes);
-        keccak256(&enc)
+        format!(
+            "{{\"from_block\":\"{}\",\"network\":\"{}\",\"price\":\"{}\",\"schema_version\":\"{}\",\"settlement\":\"{}\",\"system\":\"{}\",\"timestamp\":\"{}\",\"unit\":\"{}\"}}",
+            from_block, network, price, schema_version, settlement, system, timestamp, unit
+        )
     }
 
-    fn eip712_digest(&self, chain_id: u64) -> B256 {
-        let domain_sep = self.domain_separator(chain_id);
-        let struct_hash = self.struct_hash();
-        let mut buf = Vec::with_capacity(2 + 32 + 32);
-        buf.extend_from_slice(&[0x19, 0x01]);
-        buf.extend_from_slice(domain_sep.as_slice());
-        buf.extend_from_slice(struct_hash.as_slice());
-        keccak256(&buf)
+    fn canonical_digest(&self) -> B256 {
+        let json = self.canonical_json_string();
+        keccak256(json.as_bytes())
     }
 
-    /// EIP-712 signing over the AgentPayload typed data.
+    /// Sign the Keccak-256 digest of the canonical JSON per spec v1.0.0.
     pub fn sign(&self, signer_key: &str) -> Result<String> {
         let signer: PrivateKeySigner = signer_key.parse()?;
-        let chain_id =
-            SystemNetworkKey::new(self.system.clone(), self.network.clone()).to_chain_id();
-        let digest = self.eip712_digest(chain_id);
+        let digest = self.canonical_digest();
         let signature = signer.sign_hash_sync(&digest)?;
         let hex_signature = hex::encode(signature.as_bytes());
         Ok(format!("0x{hex_signature}"))
@@ -219,19 +159,6 @@ impl AgentPayload {
         Ok(format!("0x{hex_signature}"))
     }
 
-    /// Validates an EIP-712 signature against the payload and returns recovered signer address. Used for round trip test.
-    #[cfg(test)]
-    pub fn validate_signature(&self, signature: &str) -> Result<Address> {
-        let sig_bytes = signature.strip_prefix("0x").unwrap_or(signature);
-        let sig_bytes = hex::decode(sig_bytes)?;
-        let signature = Signature::from_raw(&sig_bytes)?;
-        let chain_id =
-            SystemNetworkKey::new(self.system.clone(), self.network.clone()).to_chain_id();
-        let digest = self.eip712_digest(chain_id);
-        let recovered = signature.recover_address_from_prehash(&digest)?;
-        Ok(recovered)
-    }
-
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
@@ -250,14 +177,40 @@ pub enum Network {
     Mainnet,
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+/// Unit for the price field in AgentPayload
+pub enum PriceUnit {
+    Wei,
+}
+
+impl PriceUnit {
+    pub fn default_wei() -> Self {
+        PriceUnit::Wei
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy::signers::local::PrivateKeySigner;
+    use alloy::{primitives::Address, signers::local::PrivateKeySigner};
     use chrono::{DateTime, Utc};
 
+    // Tests-only helper to validate a canonical JSON signature against this payload
+    impl AgentPayload {
+        pub fn validate_signature(&self, signature: &str) -> anyhow::Result<Address> {
+            let sig_bytes = signature.strip_prefix("0x").unwrap_or(signature);
+            let sig_bytes = alloy::hex::decode(sig_bytes)?;
+            let signature = Signature::from_raw(&sig_bytes)?;
+            let digest = self.canonical_digest();
+            let recovered = signature.recover_address_from_prehash(&digest)?;
+            Ok(recovered)
+        }
+    }
+
     #[test]
-    fn test_eip712_sign_and_recover_roundtrip() {
+    fn test_canonical_sign_and_recover_roundtrip() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-01T12:00:00.500000000Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -271,7 +224,8 @@ mod tests {
             timestamp,
             system: System::Ethereum,
             network: Network::Mainnet,
-            price: U256::from(20_000_000_000u128), // 20 gwei in wei
+            unit: PriceUnit::Wei,
+            price: "20000000000".to_string(),
         };
 
         // Sign

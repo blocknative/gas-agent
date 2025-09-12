@@ -44,6 +44,7 @@ dotenv = "~0.15.0"
 opentelemetry-prometheus = "~0.17.0"
 bytes = "~1.10.1"
 hex = "~0.4.3"
+sha2 = "~0.10.8"
 
 opentelemetry_sdk = { version = "~0.24.1", default-features = false, features = [
     "metrics",
