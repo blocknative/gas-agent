@@ -43,7 +43,10 @@ version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b4ae82946772d69f868b9ef81fc66acb1b149ef9b4601849bec4bcf5da6552e"
 dependencies = [
+ "alloy-consensus",
  "alloy-core",
+ "alloy-eips",
+ "alloy-serde",
  "alloy-signer",
  "alloy-signer-local",
 ]
@@ -1525,7 +1528,7 @@ dependencies = [
 
 [[package]]
 name = "gas-agent"
-version = "0.0.9"
+version = "0.1.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -1544,6 +1547,7 @@ dependencies = [
  "rust_decimal_macros",
  "serde",
  "serde_json",
+ "sha2",
  "strum",
  "strum_macros",
  "thiserror 2.0.12",

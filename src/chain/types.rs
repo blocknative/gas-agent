@@ -1,7 +1,10 @@
 use super::super::types::AgentPayload;
 use crate::types::{Network, System, SystemNetworkKey};
 use alloy::{
-    primitives::aliases::{U240, U48},
+    primitives::{
+        aliases::{U240, U48},
+        U256,
+    },
     signers::Signature,
 };
 
@@ -56,7 +59,15 @@ impl From<AgentPayload> for OraclePayloadV2 {
             },
             records: vec![OraclePayloadRecordV2 {
                 typ: 340, // Hardcoded into type 340 - Max Priority Fee Per Gas 99th.
-                value: U240::from(payload.price),
+                value: {
+                    // Convert decimal string price (wei) to uint240 by truncating high 16 bits (should be zero for realistic prices)
+                    let wei = U256::from_str_radix(&payload.price, 10)
+                        .expect("valid decimal string for wei price");
+                    let bytes32 = wei.to_be_bytes::<32>();
+                    let mut arr30 = [0u8; 30];
+                    arr30.copy_from_slice(&bytes32[2..]);
+                    U240::from_be_bytes::<30>(arr30)
+                },
             }],
         }
     }

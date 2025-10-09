@@ -4,9 +4,7 @@ use crate::distribution::BlockDistribution;
 use crate::models::{apply_model, ModelError};
 use crate::publish::publish_agent_payload;
 use crate::rpc::{get_latest_block, get_rpc_client, Block, BlockHeader, RpcClient};
-use crate::types::{
-    AgentKind, AgentPayload, AgentPayloadKind, FeeUnit, Settlement, SystemNetworkKey,
-};
+use crate::types::{AgentKind, AgentPayload, PriceUnit, Settlement, SystemNetworkKey};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use reqwest::Url;
@@ -99,15 +97,16 @@ impl GasAgent {
                     Err(e) => return Err(e.into()),
                 };
 
+                let price_wei = (price * 1_000_000_000f64).round() as u128;
                 let payload = AgentPayload {
+                    schema_version: "1".to_string(),
                     from_block,
                     settlement,
                     timestamp: Utc::now(),
-                    unit: FeeUnit::Gwei,
                     system: self.chain_config.system.clone(),
                     network: self.chain_config.network.clone(),
-                    price,
-                    kind: AgentPayloadKind::Estimate,
+                    unit: PriceUnit::Wei,
+                    price: price_wei.to_string(),
                 };
 
                 publish_agent_payload(
@@ -131,15 +130,16 @@ impl GasAgent {
 
                 if let Some(node_price) = node_price {
                     let chain_tip = self.chain_tip.read().await.clone();
+                    let price_wei = (node_price * 1_000_000_000f64).round() as u128;
                     let payload = AgentPayload {
+                        schema_version: "1".to_string(),
                         from_block: chain_tip.number + 1,
                         settlement: Settlement::Fast,
                         timestamp: Utc::now(),
-                        unit: FeeUnit::Gwei,
                         system: self.chain_config.system.clone(),
                         network: self.chain_config.network.clone(),
-                        price: node_price,
-                        kind: AgentPayloadKind::Estimate,
+                        unit: PriceUnit::Wei,
+                        price: price_wei.to_string(),
                     };
 
                     publish_agent_payload(
@@ -153,15 +153,16 @@ impl GasAgent {
             }
             AgentKind::Target => {
                 let chain_tip = self.chain_tip.read().await.clone();
+                let price_wei = (actual_min * 1_000_000_000f64).round() as u128;
                 let payload = AgentPayload {
+                    schema_version: "1".to_string(),
                     from_block: chain_tip.number,
                     settlement: Settlement::Immediate,
                     timestamp: Utc::now(),
-                    unit: FeeUnit::Gwei,
                     system: self.chain_config.system.clone(),
                     network: self.chain_config.network.clone(),
-                    price: actual_min,
-                    kind: AgentPayloadKind::Target,
+                    unit: PriceUnit::Wei,
+                    price: price_wei.to_string(),
                 };
 
                 publish_agent_payload(

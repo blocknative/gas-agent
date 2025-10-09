@@ -1,16 +1,16 @@
+use crate::chain::{sign::PayloadSigner, types::SignedOraclePayloadV2};
+#[cfg(test)]
+use alloy::signers::Signature;
 use alloy::{
     hex,
-    primitives::keccak256,
+    primitives::{keccak256, B256},
     signers::{local::PrivateKeySigner, Signer},
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::{fmt, str::FromStr};
 use strum_macros::{Display, EnumString};
-
-use crate::chain::{sign::PayloadSigner, types::SignedOraclePayloadV2};
 
 #[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
 #[strum(serialize_all = "snake_case")]
@@ -71,65 +71,71 @@ impl From<String> for AgentKind {
     }
 }
 
-#[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
-#[strum(serialize_all = "UPPERCASE")]
-#[serde(rename_all = "UPPERCASE")]
-pub enum FeeUnit {
-    Gwei,
-}
-
-#[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize)]
-#[strum(serialize_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
-pub enum AgentPayloadKind {
-    Estimate,
-    Target,
-}
-
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AgentPayload {
+    /// Schema version string for signed payloads
+    #[serde(default = "AgentPayload::schema_version")]
+    pub schema_version: String,
     /// The block height this payload is valid from
     pub from_block: u64,
     /// How fast the settlement time is for this payload
     pub settlement: Settlement,
-    /// The exact time the prediction is captured UTC.
+    /// The exact time the estimate is captured UTC.
     pub timestamp: DateTime<Utc>,
-    /// The unit the fee is denominated in (e.g. gwei, sats)
-    pub unit: FeeUnit,
-    /// The name of the chain the estimations are for (eg. ethereum, bitcoin, base)
+    /// The name of the chain the estimations are for (eg. ethereum, base)
     pub system: System,
     /// mainnet, etc.
     pub network: Network,
-    /// The estimated price
-    pub price: f64,
-    pub kind: AgentPayloadKind,
+    /// The unit of the `price` field (currently only wei)
+    #[serde(default = "PriceUnit::default_wei")]
+    pub unit: PriceUnit,
+    /// The estimated price as a decimal string. Interpretation depends on `unit`.
+    /// For `wei`, this MUST be an integer decimal string with no leading zeros (except "0").
+    pub price: String,
 }
 
 impl AgentPayload {
-    /// Hashes (keccak256) the payload and returns as bytes
-    pub fn hash(&self) -> Vec<u8> {
-        let json = json!({
-            "timestamp": self.timestamp,
-            "system": self.system,
-            "network": self.network,
-            "settlement": self.settlement,
-            "from_block": self.from_block,
-            "price": self.price,
-            "unit": self.unit,
-            "kind": self.kind,
-        });
-
-        let bytes = json.to_string().as_bytes().to_vec();
-        let message_hash = keccak256(&bytes).to_string();
-        message_hash.as_bytes().to_vec()
+    fn schema_version() -> String {
+        "1".to_string()
     }
 
-    pub async fn sign(&self, signer_key: &str) -> Result<String> {
-        let message = self.hash();
-        let signer: PrivateKeySigner = signer_key.parse()?;
-        let signature = signer.sign_message(&message).await?;
-        let hex_signature = hex::encode(signature.as_bytes());
+    // --- Canonical JSON signing helpers ---
+    fn timestamp_ns_string(&self) -> String {
+        let secs = self.timestamp.timestamp() as i128;
+        let nanos = self.timestamp.timestamp_subsec_nanos() as i128;
+        let ts_ns: i128 = secs * 1_000_000_000 + nanos;
+        assert!(ts_ns >= 0, "negative timestamps are not supported");
+        ts_ns.to_string()
+    }
 
+    /// Build minified canonical JSON with lexicographically sorted keys including exactly the AgentPayload fields.
+    pub fn canonical_json_string(&self) -> String {
+        let schema_version = self.schema_version.clone();
+        let from_block = self.from_block.to_string();
+        let settlement = self.settlement.to_string().to_lowercase();
+        let timestamp = self.timestamp_ns_string();
+        let system = self.system.to_string().to_lowercase();
+        let network = self.network.to_string().to_lowercase();
+        let price = self.price.clone();
+        let unit = self.unit.to_string().to_lowercase();
+
+        format!(
+            "{{\"from_block\":\"{}\",\"network\":\"{}\",\"price\":\"{}\",\"schema_version\":\"{}\",\"settlement\":\"{}\",\"system\":\"{}\",\"timestamp\":\"{}\",\"unit\":\"{}\"}}",
+            from_block, network, price, schema_version, settlement, system, timestamp, unit
+        )
+    }
+
+    fn canonical_digest(&self) -> B256 {
+        let json = self.canonical_json_string();
+        keccak256(json.as_bytes())
+    }
+
+    /// Sign the Keccak-256 digest of the canonical JSON per spec v1.0.0.
+    pub async fn sign(&self, signer_key: &str) -> Result<String> {
+        let signer: PrivateKeySigner = signer_key.parse()?;
+        let digest = self.canonical_digest();
+        let signature = signer.sign_hash(&digest).await?;
+        let hex_signature = hex::encode(signature.as_bytes());
         Ok(format!("0x{hex_signature}"))
     }
 
@@ -143,7 +149,12 @@ impl AgentPayload {
         let signer: PrivateKeySigner = signer_key.parse()?;
         opv2.to_signed_payload(&mut buf, signer)?;
 
-        let hex_signature = hex::encode(opv2.signature.unwrap().as_bytes());
+        let hex_signature = hex::encode(
+            opv2.signature
+                .as_ref()
+                .context("signature should be set after signing")?
+                .as_bytes(),
+        );
 
         Ok(format!("0x{hex_signature}"))
     }
@@ -163,6 +174,67 @@ pub enum System {
 #[serde(rename_all = "lowercase")]
 pub enum Network {
     Mainnet,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+/// Unit for the price field in AgentPayload
+pub enum PriceUnit {
+    Wei,
+}
+
+impl PriceUnit {
+    pub fn default_wei() -> Self {
+        PriceUnit::Wei
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::{primitives::Address, signers::local::PrivateKeySigner};
+    use chrono::{DateTime, Utc};
+
+    // Tests-only helper to validate a canonical JSON signature against this payload
+    impl AgentPayload {
+        pub fn validate_signature(&self, signature: &str) -> anyhow::Result<Address> {
+            let sig_bytes = signature.strip_prefix("0x").unwrap_or(signature);
+            let sig_bytes = alloy::hex::decode(sig_bytes)?;
+            let signature = Signature::from_raw(&sig_bytes)?;
+            let digest = self.canonical_digest();
+            let recovered = signature.recover_address_from_prehash(&digest)?;
+            Ok(recovered)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_canonical_sign_and_recover_roundtrip() {
+        let timestamp = DateTime::parse_from_rfc3339("2024-01-01T12:00:00.500000000Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        // Fixed private key for reproducibility (DO NOT USE IN PROD)
+        let sk_hex = "0x59c6995e998f97a5a0044976f3ac3b8c9f27a7d9b3bcd2b0d7aeb5f3e9eae7c6";
+        let signer: PrivateKeySigner = sk_hex.parse().unwrap();
+        let payload = AgentPayload {
+            schema_version: "1".to_string(),
+            from_block: 12345,
+            settlement: Settlement::Fast,
+            timestamp,
+            system: System::Ethereum,
+            network: Network::Mainnet,
+            unit: PriceUnit::Wei,
+            price: "20000000000".to_string(),
+        };
+
+        // Sign
+        let sig = payload.sign(sk_hex).await.unwrap();
+        assert!(sig.starts_with("0x"));
+
+        // Recover and ensure matches the signer address
+        let recovered = payload.validate_signature(&sig).unwrap();
+        assert_eq!(recovered, signer.address());
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -211,25 +283,6 @@ impl SystemNetworkKey {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct SystemNetworkSettlementKey {
-    pub system: System,
-    pub network: Network,
-    pub settlement: Settlement,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct BlockWindow {
-    pub start: u64,
-    pub end: u64,
-}
-
-impl fmt::Display for BlockWindow {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}-{}", self.start, self.end)
-    }
-}
-
 #[derive(Debug, Clone, EnumString, Display, Deserialize, Serialize, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
@@ -243,22 +296,4 @@ pub enum Settlement {
     Medium,
     /// 1 hour
     Slow,
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize)]
-pub struct AgentKey {
-    pub settlement: Settlement,
-    pub agent_id: String,
-    pub system: System,
-    pub network: Network,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct AgentScore {
-    pub agent_id: String,
-    pub inclusion_cov: Option<f64>,
-    pub overpayment_cov: Option<f64>,
-    pub total_score: Option<f64>,
-    pub inclusion_rate: f64,
-    pub avg_overpayment: Option<f64>,
 }

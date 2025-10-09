@@ -1,6 +1,6 @@
 [package]
 name = "gas-agent"
-version = "0.0.9"
+version = "0.1.0"
 edition = "2021"
 description = "Blocknative Gas Agent - Generate real-time gas price estimates for the Gas Network"
 homepage = "https://gas.network"
@@ -21,6 +21,7 @@ strip = true
 [dependencies]
 alloy = { version = "~0.12.0", default-features = false, features = [
     "signer-local",
+    "serde",
 ] }
 
 tokio = { version = "~1.44.0", features = ["full"] }
@@ -43,6 +44,7 @@ dotenv = "~0.15.0"
 opentelemetry-prometheus = "~0.17.0"
 bytes = "~1.10.1"
 hex = "~0.4.3"
+sha2 = "~0.10.8"
 
 opentelemetry_sdk = { version = "~0.24.1", default-features = false, features = [
     "metrics",
