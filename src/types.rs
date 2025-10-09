@@ -4,7 +4,7 @@ use alloy::signers::Signature;
 use alloy::{
     hex,
     primitives::{keccak256, B256},
-    signers::{local::PrivateKeySigner, SignerSync},
+    signers::{local::PrivateKeySigner, Signer},
 };
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -131,10 +131,10 @@ impl AgentPayload {
     }
 
     /// Sign the Keccak-256 digest of the canonical JSON per spec v1.0.0.
-    pub fn sign(&self, signer_key: &str) -> Result<String> {
+    pub async fn sign(&self, signer_key: &str) -> Result<String> {
         let signer: PrivateKeySigner = signer_key.parse()?;
         let digest = self.canonical_digest();
-        let signature = signer.sign_hash_sync(&digest)?;
+        let signature = signer.sign_hash(&digest).await?;
         let hex_signature = hex::encode(signature.as_bytes());
         Ok(format!("0x{hex_signature}"))
     }
@@ -209,8 +209,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_canonical_sign_and_recover_roundtrip() {
+    #[tokio::test]
+    async fn test_canonical_sign_and_recover_roundtrip() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-01T12:00:00.500000000Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -229,7 +229,7 @@ mod tests {
         };
 
         // Sign
-        let sig = payload.sign(sk_hex).unwrap();
+        let sig = payload.sign(sk_hex).await.unwrap();
         assert!(sig.starts_with("0x"));
 
         // Recover and ensure matches the signer address

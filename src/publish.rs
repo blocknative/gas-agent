@@ -10,7 +10,7 @@ pub async fn publish_agent_payload(
     signer_key: &str,
     payload: &AgentPayload,
 ) -> Result<()> {
-    let signature = payload.sign(signer_key)?;
+    let signature = payload.sign(signer_key).await?;
     let network_signature = payload.clone().network_signature(signer_key)?;
 
     let json = json!({
