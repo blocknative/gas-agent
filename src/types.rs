@@ -158,7 +158,6 @@ impl AgentPayload {
 
         Ok(format!("0x{hex_signature}"))
     }
-
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
