@@ -48,7 +48,7 @@ opentelemetry_sdk = { version = "~0.24.1", default-features = false, features = 
     "metrics",
 ] }
 
-tracing-subscriber = { version = "~0.3.18", features = [
+tracing-subscriber = { version = "~0.3.20", features = [
     "json",
     "env-filter",
     "time",
