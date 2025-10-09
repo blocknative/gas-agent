@@ -116,7 +116,6 @@ To register your agent and get your signing addresses whitelisted:
 2. **Save Your Keys**: Securely store the private key for your agent configuration and note the corresponding public address
 
 3. **Submit Whitelist Request**: Contact the Blocknative team with your public address(es):
-
    - **Email**: [support@blocknative.com](mailto:support@blocknative.com)
    - **Discord**: Join our community at [https://discord.com/invite/KZaBVME](https://discord.com/invite/KZaBVME)
 
@@ -185,11 +184,13 @@ cargo run --release -- start --chains 'YOUR-CONFIG-JSON'
 ### Development Workflow
 
 1. **Create a feature branch**:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
 
 2. **Make your changes** and ensure code quality:
+
    ```bash
    # Check for compilation errors
    cargo check
@@ -205,6 +206,7 @@ cargo run --release -- start --chains 'YOUR-CONFIG-JSON'
    ```
 
 3. **Commit your changes**:
+
    ```bash
    git add .
    git commit -m "Add your feature description"
@@ -261,19 +263,15 @@ The chain configuration is specified as a JSON array where each object represent
 #### ChainConfig Fields
 
 - **`system`** (required): The blockchain system to connect to
-
   - Available options: `"ethereum"`, `"base"`, `"polygon"`
 
 - **`network`** (required): The network within the system
-
   - Available options: `"mainnet"`
 
 - **`json_rpc_url`** (required): The JSON-RPC endpoint URL to poll for new blocks
-
   - Example: `"https://ethereum-rpc.publicnode.com"`
 
 - **`pending_block_data_source`** (optional): Configuration for fetching pending-block (mempool) data
-
   - See [Pending Block Data Source](#pending-block-data-source) section below
 
 - **`agents`** (required): Array of agent configurations to run on this chain
@@ -359,7 +357,6 @@ Each agent in the `agents` array supports the following configuration:
 **Fields:**
 
 - **`kind`** (required): The type of agent to run
-
   - `"node"`: Publishes the standard estimate from the node
   - `"target"`: Publishes the actual minimum price for new blocks
   - Model-based agents:
@@ -567,7 +564,6 @@ gas-agent start --chains '[{
 2. **Handle Edge Cases**: Always check for empty distributions and provide fallback values.
 
 3. **Consider Settlement Times**: Choose appropriate `Settlement` values:
-
    - `Immediate`: Next block
    - `Fast`: ~15 seconds
    - `Medium`: ~15 minutes
@@ -644,7 +640,7 @@ When you submit a gas price prediction, the Gas Network evaluates its accuracy w
    - **Inclusion Rate**: Did your prediction price get onchain within the block window
    - **Cost Efficiency**: Percentage overpayment
 
-For details on the *Evaluation Function* used to score your predictions, see the [Evaluation Function](EVALUATION.md).
+For details on the _Evaluation Function_ used to score your predictions, see the [Evaluation Function](EVALUATION.md).
 
 ## Building for Production
 
@@ -679,17 +675,21 @@ Update `CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/) 
 ## [0.1.0] - 2025-01-22
 
 ### Added
+
 - New feature descriptions
 - New model implementations
 
 ### Changed
+
 - Breaking changes or significant modifications
 - Performance improvements
 
 ### Fixed
+
 - Bug fixes and error handling improvements
 
 ### Removed
+
 - Deprecated features that were removed
 ```
 
