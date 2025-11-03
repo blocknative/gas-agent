@@ -7,6 +7,7 @@ use crate::rpc::{get_latest_block, get_rpc_client, Block, BlockHeader, RpcClient
 use crate::types::{AgentKind, AgentPayload, PriceUnit, Settlement, SystemNetworkKey};
 use anyhow::{Context, Result};
 use chrono::Utc;
+use rand::Rng;
 use reqwest::Url;
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,6 +15,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 const MAX_NUM_BLOCK_DISTRIBUTIONS: usize = 50;
+const ERROR_RETRY_BASE_BACKOFF_MS: u64 = 250;
+const ERROR_RETRY_MAX_BACKOFF_MS: u64 = 5_000;
 
 pub async fn start_agents(chain_config: ChainConfig, config: &Config) -> Result<()> {
     let agents = GasAgent::new(chain_config, config).await?;
@@ -253,10 +256,15 @@ impl GasAgent {
             tokio::time::sleep(wait).await;
 
             let mut get_new_block = true;
+            // Track exponential backoff across consecutive RPC failures
+            let mut backoff_ms: u64 = ERROR_RETRY_BASE_BACKOFF_MS;
+            let max_backoff_ms: u64 = ERROR_RETRY_MAX_BACKOFF_MS;
 
             while get_new_block {
                 match get_latest_block(&self.rpc_client).await {
                     Ok(block) => {
+                        // Reset backoff state after a successful RPC response
+                        backoff_ms = ERROR_RETRY_BASE_BACKOFF_MS;
                         debug!(
                             "Block for System: {}, Network: {}, Height {}",
                             &self.chain_config.system, &self.chain_config.network, block.number
@@ -286,7 +294,16 @@ impl GasAgent {
                         }
                     }
                     Err(e) => {
-                        error!(error = %e, "Failed to get latest block");
+                        let cap = backoff_ms.min(max_backoff_ms);
+                        let floor = ERROR_RETRY_BASE_BACKOFF_MS.min(cap);
+                        let sleep_ms: u64 = rand::rng().random_range(floor..=cap);
+                        error!(
+                            error = ?e,
+                            retry_ms = sleep_ms,
+                            "Failed to get latest block; retrying"
+                        );
+                        tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
+                        backoff_ms = backoff_ms.saturating_mul(2).min(max_backoff_ms);
                     }
                 }
             }
