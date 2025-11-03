@@ -1,6 +1,6 @@
 [package]
 name = "gas-agent"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Blocknative Gas Agent - Generate real-time gas price estimates for the Gas Network"
 homepage = "https://gas.network"
